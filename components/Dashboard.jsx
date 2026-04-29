@@ -59,6 +59,46 @@ const DEPOSIT_COLUMN_PATTERNS = [
   { field: "count", pattern: /^(deposits?|count|deposit[\s_.-]*count|total[\s_.-]*deposits?|ftd|first[\s_.-]*deposit)/i },
 ];
 
+// Country code → full name normalization for imports.
+// Catches Meta Ads Manager exports that use ISO 2-letter codes (BR, ID, TH, etc.)
+// plus common Spanish/Portuguese/local-language variants.
+const COUNTRY_NORMALIZE = {
+  // LATAM
+  BR: "Brazil", BRA: "Brazil", BRASIL: "Brazil",
+  MX: "Mexico", MEX: "Mexico", "MÉXICO": "Mexico",
+  AR: "Argentina", ARG: "Argentina",
+  CL: "Chile", CHL: "Chile",
+  CO: "Colombia", COL: "Colombia",
+  PE: "Peru", PER: "Peru", "PERÚ": "Peru",
+  UY: "Uruguay", PY: "Paraguay", BO: "Bolivia", EC: "Ecuador", VE: "Venezuela",
+  // SEA
+  ID: "Indonesia", IDN: "Indonesia",
+  TH: "Thailand", THA: "Thailand",
+  VN: "Vietnam", VNM: "Vietnam", "VIÊTNAM": "Vietnam", "VIET NAM": "Vietnam",
+  MY: "Malaysia", MYS: "Malaysia",
+  PH: "Philippines", PHL: "Philippines", FILIPINAS: "Philippines",
+  SG: "Singapore", SGP: "Singapore",
+  KH: "Cambodia", LA: "Laos", MM: "Myanmar",
+  // Other common
+  US: "United States", USA: "United States",
+  GB: "United Kingdom", UK: "United Kingdom",
+  CA: "Canada", AU: "Australia", NZ: "New Zealand",
+  DE: "Germany", FR: "France", ES: "Spain", IT: "Italy", PT: "Portugal", NL: "Netherlands",
+  JP: "Japan", KR: "South Korea", CN: "China", HK: "Hong Kong", TW: "Taiwan",
+  IN: "India", PK: "Pakistan", BD: "Bangladesh",
+  AE: "United Arab Emirates", SA: "Saudi Arabia",
+  EG: "Egypt", TR: "Turkey", ZA: "South Africa", NG: "Nigeria", KE: "Kenya", GH: "Ghana",
+};
+
+function normalizeGeo(input) {
+  if (input == null) return input;
+  const trimmed = String(input).trim();
+  if (!trimmed) return trimmed;
+  const upper = trimmed.toUpperCase();
+  if (COUNTRY_NORMALIZE[upper]) return COUNTRY_NORMALIZE[upper];
+  return trimmed;
+}
+
 const formatUSD = (n) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 const formatUSDCompact = (n) => {
@@ -140,6 +180,42 @@ function autoDetectField(header, patterns = COLUMN_PATTERNS) {
     if (pattern.test(h)) return field;
   }
   return "skip";
+}
+
+// Region/multi-country codes for auto-extraction from campaign names like "[LATAM] ..."
+const REGION_CODES = {
+  LATAM: "Multi-country", SEA: "Multi-country", APAC: "Multi-country",
+  EMEA: "Multi-country", EU: "Multi-country", MENA: "Multi-country",
+  GLOBAL: "Multi-country", WW: "Multi-country", ROW: "Multi-country",
+};
+
+// Try to pull a country code from text like "[TH] Million Dollar..." or "[LATAM] Bono"
+// Returns { geo, codeToken } where codeToken is the matched bracket text (e.g. "[TH]")
+function extractGeoFromText(text) {
+  if (!text || typeof text !== "string") return null;
+  const bracketMatch = text.match(/\[([A-Za-z]{2,6})\]/);
+  if (bracketMatch) {
+    const code = bracketMatch[1].toUpperCase();
+    if (COUNTRY_NORMALIZE[code]) {
+      return { geo: COUNTRY_NORMALIZE[code], codeToken: bracketMatch[0] };
+    }
+    if (REGION_CODES[code]) {
+      return { geo: REGION_CODES[code], codeToken: bracketMatch[0] };
+    }
+  }
+  // Fallback: full country name appearing anywhere in text
+  const knownGeos = Array.from(new Set(Object.values(COUNTRY_NORMALIZE)));
+  for (const geo of knownGeos) {
+    const re = new RegExp(`\\b${geo}\\b`, "i");
+    if (re.test(text)) return { geo, codeToken: null };
+  }
+  return null;
+}
+
+// Strip the matched "[XX] " token from a campaign name once geo has been extracted
+function stripCodeFromName(name, codeToken) {
+  if (!codeToken || !name) return name;
+  return name.replace(codeToken, "").replace(/^[\s\-_:|]+/, "").trim() || name;
 }
 
 const aggregate = (entryList, depositList = []) => {
@@ -1153,6 +1229,7 @@ function ImportModal({ onClose, onImport }) {
   const [defaultAccount, setDefaultAccount] = useState("");
   const [defaultGeo, setDefaultGeo] = useState("");
   const [skipDuplicates, setSkipDuplicates] = useState(true);
+  const [autoExtractGeo, setAutoExtractGeo] = useState(true);
   const [error, setError] = useState("");
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -1292,10 +1369,20 @@ function ImportModal({ onClose, onImport }) {
           const v = row[i];
           if (field === "date") entry.date = parseDate(v);
           else if (field === "account") entry.account = String(v || "").trim() || entry.account;
-          else if (field === "geo") entry.geo = String(v || "").trim() || entry.geo;
+          else if (field === "geo") entry.geo = normalizeGeo(String(v || "").trim()) || entry.geo;
           else if (field === "notes") entry.notes = String(v || "").trim();
           else { const n = parseNumberLoose(v); if (n != null) entry[field] = n; }
         });
+        // Auto-extract geo from campaign name if not already set (e.g. "[TH] Million Dollar..." → Thailand)
+        if (autoExtractGeo && !entry.geo && entry.account) {
+          const extracted = extractGeoFromText(entry.account);
+          if (extracted) {
+            entry.geo = extracted.geo;
+            if (extracted.codeToken) {
+              entry.account = stripCodeFromName(entry.account, extracted.codeToken);
+            }
+          }
+        }
         if (entry.date && entry.amount > 0) out.push(entry);
       } else {
         const entry = { date: null, geo: defaultGeo || "", count: 0 };
@@ -1303,7 +1390,7 @@ function ImportModal({ onClose, onImport }) {
           if (field === "skip") return;
           const v = row[i];
           if (field === "date") entry.date = parseDate(v);
-          else if (field === "geo") entry.geo = String(v || "").trim() || entry.geo;
+          else if (field === "geo") entry.geo = normalizeGeo(String(v || "").trim()) || entry.geo;
           else if (field === "count") { const n = parseNumberLoose(v); if (n != null) entry.count = n; }
         });
         if (entry.date && entry.count > 0 && entry.geo) out.push(entry);
@@ -1461,6 +1548,22 @@ function ImportModal({ onClose, onImport }) {
                 <button onClick={() => { setParsedRows(null); setHeaders([]); setColumnMapping([]); }} className="text-xs text-slate-400 hover:text-slate-200">Start over</button>
               </div>
 
+              {/* Aggregated-data warning — all rows share the same date */}
+              {(() => {
+                const dateColIdx = columnMapping.indexOf("date");
+                if (dateColIdx === -1 || parsedRows.length < 2) return null;
+                const dates = new Set(parsedRows.map((r) => parseDate(r[dateColIdx])).filter(Boolean));
+                if (dates.size > 1) return null;
+                return (
+                  <div className="mb-4 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                      All {parsedRows.length} rows share the same date. If this is from Meta Ads Manager, re-export with <strong>Breakdown → Time → Day</strong> to get one row per day per campaign.
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
                 {dataType === "entries" && (
                   <div>
@@ -1485,6 +1588,17 @@ function ImportModal({ onClose, onImport }) {
                   </label>
                 </div>
               </div>
+
+              {dataType === "entries" && (
+                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer mb-4 -mt-1">
+                  <input type="checkbox" checked={autoExtractGeo} onChange={(e) => setAutoExtractGeo(e.target.checked)} className="w-4 h-4 accent-violet-500" />
+                  <span>
+                    <span className="text-slate-200">Auto-extract country from campaign name</span>
+                    <span className="text-slate-500 ml-1">(e.g. "[TH] Million Dollar..." → Geo: Thailand · Account name cleaned)</span>
+                  </span>
+                </label>
+              )}
+
 
               <div className="overflow-x-auto scroll-x rounded-lg border border-slate-800/60 mb-4">
                 <table className="w-full text-xs">
