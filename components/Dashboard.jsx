@@ -571,6 +571,54 @@ export default function MetaSpendDashboard() {
     return list.sort((a, b) => b.date.localeCompare(a.date));
   }, [deposits, rangeFilter, geoFilter]);
 
+  // Multi-period summary stats — independent of the date range filter so the
+  // summary table can show Today / 7D / 30D / MTD / All-time side by side.
+  // Respects account+geo filter for drill-down (e.g. "show all periods for Brazil").
+  const summaryStats = useMemo(() => {
+    let entriesScoped = entries;
+    let depositsScoped = deposits;
+    if (accountFilter !== "all") {
+      entriesScoped = entriesScoped.filter((e) => e.account === accountFilter);
+    }
+    if (geoFilter !== "all") {
+      entriesScoped = entriesScoped.filter((e) => e.geo === geoFilter);
+      depositsScoped = depositsScoped.filter((d) => d.geo === geoFilter);
+    }
+
+    const today = todayISO();
+    const yesterday = daysAgoISO(1);
+    const weekAgo = daysAgoISO(7);
+    const monthAgo = daysAgoISO(30);
+    const monthStart = today.slice(0, 7) + "-01";
+
+    const filterRange = (list, start, end) =>
+      list.filter((x) => x.date >= start && (end ? x.date <= end : true));
+
+    return {
+      today: aggregate(
+        entriesScoped.filter((e) => e.date === today),
+        depositsScoped.filter((d) => d.date === today)
+      ),
+      yesterday: aggregate(
+        entriesScoped.filter((e) => e.date === yesterday),
+        depositsScoped.filter((d) => d.date === yesterday)
+      ),
+      last7: aggregate(
+        filterRange(entriesScoped, weekAgo),
+        filterRange(depositsScoped, weekAgo)
+      ),
+      last30: aggregate(
+        filterRange(entriesScoped, monthAgo),
+        filterRange(depositsScoped, monthAgo)
+      ),
+      mtd: aggregate(
+        filterRange(entriesScoped, monthStart),
+        filterRange(depositsScoped, monthStart)
+      ),
+      allTime: aggregate(entriesScoped, depositsScoped),
+    };
+  }, [entries, deposits, accountFilter, geoFilter]);
+
   const stats = useMemo(() => {
     const today = todayISO();
     const yesterday = daysAgoISO(1);
@@ -793,15 +841,85 @@ export default function MetaSpendDashboard() {
           </div>
         </div>
 
-        {/* KPI strip */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4 mb-8">
-          <KpiCard label="7D Spend" value={formatUSDCompact(stats.week.spend)} change={stats.wow} accent="cyan" />
-          <KpiCard label="7D Leads" value={formatNumCompact(stats.week.leads)} change={stats.leadsWow} higherIsBetter={true} accent="emerald" />
-          <KpiCard label="7D Deposits" value={formatNumCompact(stats.week.deposits)} change={stats.depositsWow} higherIsBetter={true} accent="amber" />
-          <KpiCard label="7D CPL" value={stats.week.cpl != null ? formatUSDCompact(stats.week.cpl) : "—"} change={stats.cplWow} higherIsBetter={false} accent="violet" />
-          <KpiCard label="7D CPD" value={stats.week.cpd != null ? formatUSDCompact(stats.week.cpd) : "—"} change={stats.cpdWow} higherIsBetter={false} accent="pink" />
-          <KpiCard label="Lead → Dep %" value={formatPct(stats.week.l2d)} sublabel={`CTR ${formatPct(stats.week.ctr)}`} accent="blue" />
+        {/* Performance Summary — multi-period numbers at a glance */}
+        <div className="glass rounded-2xl overflow-hidden mb-8">
+          <div className="px-5 md:px-6 py-4 border-b border-slate-800/60 flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 className="font-display text-lg font-bold text-white">Performance Summary</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                All periods at a glance
+                {accountFilter !== "all" || geoFilter !== "all"
+                  ? ` · Filtered${accountFilter !== "all" ? ` to ${accountFilter}` : ""}${geoFilter !== "all" ? ` · ${geoFilter}` : ""}`
+                  : " · All accounts & countries"}
+              </p>
+            </div>
+          </div>
+          <div className="overflow-x-auto scroll-x">
+            <table className="w-full text-sm min-w-[700px]">
+              <thead>
+                <tr className="text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800/60">
+                  <th className="text-left px-4 py-3 font-medium">Period</th>
+                  <th className="text-right px-4 py-3 font-medium">Spend</th>
+                  <th className="text-right px-4 py-3 font-medium">Impressions</th>
+                  <th className="text-right px-4 py-3 font-medium">Clicks</th>
+                  <th className="text-right px-4 py-3 font-medium">Leads</th>
+                  <th className="text-right px-4 py-3 font-medium">Deposits</th>
+                  <th className="text-right px-4 py-3 font-medium">CPL</th>
+                  <th className="text-right px-4 py-3 font-medium">CPD</th>
+                  <th className="text-right px-4 py-3 font-medium">L→D %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { label: "Today", data: summaryStats.today },
+                  { label: "Yesterday", data: summaryStats.yesterday },
+                  { label: "Last 7 days", data: summaryStats.last7 },
+                  { label: "Last 30 days", data: summaryStats.last30 },
+                  { label: "Month to date", data: summaryStats.mtd },
+                  { label: "All-time", data: summaryStats.allTime, emphasize: true },
+                ].map((row) => (
+                  <tr
+                    key={row.label}
+                    className={
+                      row.emphasize
+                        ? "bg-cyan-500/5 border-t-2 border-cyan-500/30"
+                        : "border-b border-slate-800/40 hover:bg-slate-800/20"
+                    }
+                  >
+                    <td className={`px-4 py-3 ${row.emphasize ? "text-cyan-300 font-bold" : "text-slate-200 font-medium"}`}>
+                      {row.label}
+                    </td>
+                    <td className={`px-4 py-3 text-right font-mono-num font-semibold ${row.emphasize ? "text-cyan-300" : "text-slate-100"}`}>
+                      {formatUSD(row.data.spend)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
+                      {row.data.impressions ? formatNumCompact(row.data.impressions) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
+                      {row.data.clicks ? formatNumCompact(row.data.clicks) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono-num text-emerald-300 font-semibold">
+                      {row.data.leads ? formatNumCompact(row.data.leads) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono-num text-amber-300 font-semibold">
+                      {row.data.deposits ? formatNumCompact(row.data.deposits) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
+                      {row.data.cpl != null ? formatUSDCompact(row.data.cpl) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
+                      {row.data.cpd != null ? formatUSDCompact(row.data.cpd) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono-num text-slate-400 text-xs">
+                      {formatPct(row.data.l2d)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
+
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2 mb-4">
