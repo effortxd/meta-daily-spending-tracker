@@ -4,3 +4,16 @@
 
 html, body { background: #0a0e1a; color: white; }
 * { box-sizing: border-box; }
+
+/* Force dark dropdown options across browsers — the native option list
+   doesn't respect parent select styling consistently otherwise */
+select { color-scheme: dark; }
+select option,
+select optgroup {
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+select option:checked {
+  background-color: #1e293b;
+}
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.6); }
