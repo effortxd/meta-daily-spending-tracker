@@ -1263,8 +1263,21 @@ function ImportModal({ onClose, onImport }) {
     const dataRows = rows.slice(1);
     if (dataRows.length === 0) { setError("Found a header row but no data rows."); return; }
     const mapping = headerRow.map((h) => autoDetectField(h, patterns));
+
+    // Dedup auto-detected mappings: if a field is matched on multiple columns,
+    // keep only the FIRST occurrence and skip the rest. Prevents bugs like
+    // "Reporting starts" and "Reporting ends" both mapping to Date (where the
+    // last one wins and you get the wrong dates). Notes can still appear multiple times.
+    const seen = new Set();
+    const dedupedMapping = mapping.map((field) => {
+      if (field === "skip" || field === "notes") return field;
+      if (seen.has(field)) return "skip";
+      seen.add(field);
+      return field;
+    });
+
     setHeaders(headerRow);
-    setColumnMapping(mapping);
+    setColumnMapping(dedupedMapping);
     setParsedRows(dataRows);
   };
 
