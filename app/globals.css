@@ -17,3 +17,30 @@ select option:checked {
   background-color: #1e293b;
 }
 input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.6); }
+
+/* Smooth number transitions when filters or data change */
+.glass {
+  transition: border-color 0.2s ease, background 0.3s ease;
+}
+
+/* Fade-in for newly mounted sections */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+main > * { animation: fadeInUp 0.35s ease-out backwards; }
+main > *:nth-child(1) { animation-delay: 0.02s; }
+main > *:nth-child(2) { animation-delay: 0.06s; }
+main > *:nth-child(3) { animation-delay: 0.10s; }
+main > *:nth-child(4) { animation-delay: 0.14s; }
+main > *:nth-child(5) { animation-delay: 0.18s; }
+main > *:nth-child(6) { animation-delay: 0.22s; }
+
+/* Subtle scrollbar styling */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.3); }
