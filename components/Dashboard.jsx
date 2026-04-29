@@ -44,7 +44,7 @@ const DEPOSIT_FIELD_OPTIONS = [
 
 const COLUMN_PATTERNS = [
   { field: "date", pattern: /^(date|day|reporting[\s_.-]*start|reporting[\s_.-]*end|date[\s_.-]*range)/i },
-  { field: "amount", pattern: /^(amount[\s_.-]*spent|spend|cost|total[\s_.-]*spent|amount)\b/i },
+  { field: "amount", pattern: /^(amount[\s_.-]*spent|spend|total[\s_.-]*spent)\b/i },
   { field: "impressions", pattern: /^(impressions|imp\b)/i },
   { field: "clicks", pattern: /^(link[\s_.-]*clicks|clicks|all[\s_.-]*clicks)/i },
   { field: "leads", pattern: /^(leads|results|conversions|registrations|complete[\s_.-]*registration|sign[\s_.-]*ups?)/i },
@@ -189,18 +189,23 @@ const REGION_CODES = {
   GLOBAL: "Multi-country", WW: "Multi-country", ROW: "Multi-country",
 };
 
-// Try to pull a country code from text like "[TH] Million Dollar..." or "[LATAM] Bono"
-// Returns { geo, codeToken } where codeToken is the matched bracket text (e.g. "[TH]")
+// Try to pull a country code from text like "[TH] Million Dollar..." or "[ID - Test] ..."
+// Returns { geo, codeToken } where codeToken is the matched bracket text (e.g. "[TH]" or "[ID - Test]")
 function extractGeoFromText(text) {
   if (!text || typeof text !== "string") return null;
-  const bracketMatch = text.match(/\[([A-Za-z]{2,6})\]/);
-  if (bracketMatch) {
-    const code = bracketMatch[1].toUpperCase();
-    if (COUNTRY_NORMALIZE[code]) {
-      return { geo: COUNTRY_NORMALIZE[code], codeToken: bracketMatch[0] };
-    }
-    if (REGION_CODES[code]) {
-      return { geo: REGION_CODES[code], codeToken: bracketMatch[0] };
+  // Find a bracketed block and extract the leading 2-6 letter code from it.
+  // Handles: [TH], [ID - Test], [LATAM-2026], [PH V1], etc.
+  const bracketContent = text.match(/\[([^\]]+)\]/);
+  if (bracketContent) {
+    const codeMatch = bracketContent[1].match(/^([A-Za-z]{2,6})\b/);
+    if (codeMatch) {
+      const code = codeMatch[1].toUpperCase();
+      if (COUNTRY_NORMALIZE[code]) {
+        return { geo: COUNTRY_NORMALIZE[code], codeToken: bracketContent[0] };
+      }
+      if (REGION_CODES[code]) {
+        return { geo: REGION_CODES[code], codeToken: bracketContent[0] };
+      }
     }
   }
   // Fallback: full country name appearing anywhere in text
@@ -1504,13 +1509,24 @@ function ImportModal({ onClose, onImport }) {
           else if (field === "notes") entry.notes = String(v || "").trim();
           else { const n = parseNumberLoose(v); if (n != null) entry[field] = n; }
         });
-        // Auto-extract geo from campaign name if not already set (e.g. "[TH] Million Dollar..." → Thailand)
-        if (autoExtractGeo && !entry.geo && entry.account) {
-          const extracted = extractGeoFromText(entry.account);
-          if (extracted) {
-            entry.geo = extracted.geo;
-            if (extracted.codeToken) {
-              entry.account = stripCodeFromName(entry.account, extracted.codeToken);
+        // Auto-extract geo from campaign name if not already set.
+        // Checks Account first, then Notes — so users can map "Campaign name"
+        // to either field. The bracketed prefix is stripped from whichever
+        // field actually contained it.
+        if (autoExtractGeo && !entry.geo) {
+          let source = null;
+          if (entry.account) {
+            const ext = extractGeoFromText(entry.account);
+            if (ext) source = { ext, field: "account", value: entry.account };
+          }
+          if (!source && entry.notes) {
+            const ext = extractGeoFromText(entry.notes);
+            if (ext) source = { ext, field: "notes", value: entry.notes };
+          }
+          if (source) {
+            entry.geo = source.ext.geo;
+            if (source.ext.codeToken) {
+              entry[source.field] = stripCodeFromName(source.value, source.ext.codeToken);
             }
           }
         }
