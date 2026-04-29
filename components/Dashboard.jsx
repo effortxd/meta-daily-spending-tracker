@@ -257,6 +257,7 @@ export default function MetaSpendDashboard() {
   const [passcodeError, setPasscodeError] = useState("");
   const [isFirstSetup, setIsFirstSetup] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Entry form
   const [date, setDate] = useState(todayISO());
@@ -511,6 +512,45 @@ export default function MetaSpendDashboard() {
       setShowImportModal(false);
       return toAdd.length;
     }
+  };
+
+  // Bulk delete — supports filtered subsets or full wipes for entries/deposits
+  const handleBulkDelete = async (mode) => {
+    let nextEntries = entries;
+    let nextDeposits = deposits;
+    let entriesChanged = false;
+    let depositsChanged = false;
+
+    if (mode === "filtered_entries") {
+      const idsToRemove = new Set(filteredEntries.map((e) => e.id));
+      nextEntries = entries.filter((e) => !idsToRemove.has(e.id));
+      entriesChanged = true;
+    } else if (mode === "filtered_deposits") {
+      const idsToRemove = new Set(filteredDeposits.map((d) => d.id));
+      nextDeposits = deposits.filter((d) => !idsToRemove.has(d.id));
+      depositsChanged = true;
+    } else if (mode === "all_entries") {
+      nextEntries = [];
+      entriesChanged = true;
+    } else if (mode === "all_deposits") {
+      nextDeposits = [];
+      depositsChanged = true;
+    } else if (mode === "everything") {
+      nextEntries = [];
+      nextDeposits = [];
+      entriesChanged = true;
+      depositsChanged = true;
+    }
+
+    if (entriesChanged) {
+      setEntries(nextEntries);
+      await persistEntries(nextEntries);
+    }
+    if (depositsChanged) {
+      setDeposits(nextDeposits);
+      await persistDeposits(nextDeposits);
+    }
+    setShowDeleteModal(false);
   };
 
   const exportCSV = () => {
@@ -783,6 +823,11 @@ export default function MetaSpendDashboard() {
             {isAdmin && (
               <button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-violet-500/20 border border-violet-500/40 text-violet-300 text-sm font-medium hover:bg-violet-500/30">
                 <Upload className="w-4 h-4" /><span className="hidden md:inline">Import</span>
+              </button>
+            )}
+            {isAdmin && (
+              <button onClick={() => setShowDeleteModal(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-pink-500/15 border border-pink-500/30 text-pink-300 text-sm font-medium hover:bg-pink-500/25">
+                <Trash2 className="w-4 h-4" /><span className="hidden md:inline">Bulk delete</span>
               </button>
             )}
             {isAdmin ? (
@@ -1337,6 +1382,19 @@ export default function MetaSpendDashboard() {
       )}
 
       {showImportModal && <ImportModal onClose={() => setShowImportModal(false)} onImport={handleBulkImport} />}
+      {showDeleteModal && (
+        <DeleteModal
+          onClose={() => setShowDeleteModal(false)}
+          onDelete={handleBulkDelete}
+          entriesTotal={entries.length}
+          depositsTotal={deposits.length}
+          filteredEntriesCount={filteredEntries.length}
+          filteredDepositsCount={filteredDeposits.length}
+          rangeFilter={rangeFilter}
+          accountFilter={accountFilter}
+          geoFilter={geoFilter}
+        />
+      )}
     </div>
   );
 }
@@ -1881,6 +1939,149 @@ function ImportModal({ onClose, onImport }) {
               </div>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== DELETE MODAL =====
+function DeleteModal({
+  onClose, onDelete,
+  entriesTotal, depositsTotal,
+  filteredEntriesCount, filteredDepositsCount,
+  rangeFilter, accountFilter, geoFilter,
+}) {
+  const [mode, setMode] = useState("filtered_entries");
+  const [confirmText, setConfirmText] = useState("");
+
+  const isFilterActive = rangeFilter !== "all" || accountFilter !== "all" || geoFilter !== "all";
+  const filterLabel = [
+    rangeFilter !== "all" ? `last ${rangeFilter} days` : null,
+    accountFilter !== "all" ? `account: ${accountFilter}` : null,
+    geoFilter !== "all" ? `geo: ${geoFilter}` : null,
+  ].filter(Boolean).join(" · ");
+
+  const counts = {
+    filtered_entries: filteredEntriesCount,
+    filtered_deposits: filteredDepositsCount,
+    all_entries: entriesTotal,
+    all_deposits: depositsTotal,
+    everything: entriesTotal + depositsTotal,
+  };
+
+  const labels = {
+    filtered_entries: "Campaign entries matching current filter",
+    filtered_deposits: "Daily deposits matching current filter",
+    all_entries: "ALL campaign entries",
+    all_deposits: "ALL daily deposits",
+    everything: "EVERYTHING (entries + deposits)",
+  };
+
+  const isHighRisk = mode === "all_entries" || mode === "all_deposits" || mode === "everything";
+  const targetCount = counts[mode] || 0;
+  const canDelete = targetCount > 0 && (!isHighRisk || confirmText === "DELETE");
+
+  const options = [
+    { value: "filtered_entries", label: "Entries matching current filter", subtitle: isFilterActive ? `Filter: ${filterLabel}` : "No filter active — same as 'all entries'", count: filteredEntriesCount, color: "violet" },
+    { value: "filtered_deposits", label: "Deposits matching current filter", subtitle: isFilterActive ? `Filter: ${filterLabel}` : "No filter active — same as 'all deposits'", count: filteredDepositsCount, color: "violet" },
+    { value: "all_entries", label: "All campaign entries", subtitle: "Wipes every imported campaign entry", count: entriesTotal, color: "pink" },
+    { value: "all_deposits", label: "All daily deposits", subtitle: "Wipes every deposit record", count: depositsTotal, color: "pink" },
+    { value: "everything", label: "Everything", subtitle: "Wipes both entries and deposits — full reset", count: entriesTotal + depositsTotal, color: "pink" },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 md:p-4 bg-black/70 backdrop-blur-sm">
+      <div className="glass rounded-2xl max-w-2xl w-full max-h-[95vh] flex flex-col overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-800/60 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-pink-500/20 flex items-center justify-center">
+              <Trash2 className="w-5 h-5 text-pink-400" />
+            </div>
+            <div>
+              <h3 className="font-display text-lg font-bold text-white">Bulk Delete</h3>
+              <p className="text-xs text-slate-400">Permanently remove imported data — cannot be undone</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-800/60 text-slate-400">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-2">
+          {options.map((opt) => {
+            const selected = mode === opt.value;
+            const disabled = opt.count === 0;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => !disabled && setMode(opt.value)}
+                disabled={disabled}
+                className={`w-full text-left p-4 rounded-lg border transition-colors ${
+                  selected
+                    ? opt.color === "pink"
+                      ? "bg-pink-500/15 border-pink-500/40"
+                      : "bg-violet-500/15 border-violet-500/40"
+                    : "bg-slate-900/40 border-slate-800/60 hover:border-slate-700/60"
+                } ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 ${
+                    selected
+                      ? opt.color === "pink" ? "border-pink-400 bg-pink-400" : "border-violet-400 bg-violet-400"
+                      : "border-slate-600"
+                  }`}>
+                    {selected && <div className="w-1.5 h-1.5 bg-slate-950 rounded-full m-auto mt-[3px]"></div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className={`text-sm font-medium ${selected ? "text-white" : "text-slate-200"}`}>{opt.label}</span>
+                      <span className={`text-xs font-mono-num font-semibold ${
+                        opt.count === 0 ? "text-slate-600" : opt.color === "pink" ? "text-pink-300" : "text-violet-300"
+                      }`}>
+                        {opt.count} {opt.count === 1 ? "record" : "records"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">{opt.subtitle}</p>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+
+          {isHighRisk && targetCount > 0 && (
+            <div className="mt-4 p-3 rounded-lg bg-pink-500/10 border border-pink-500/30">
+              <div className="flex items-start gap-2 mb-3">
+                <AlertCircle className="w-4 h-4 text-pink-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-pink-200">
+                  This will permanently delete <strong className="font-mono-num">{targetCount}</strong> {targetCount === 1 ? "record" : "records"}.
+                  Type <strong className="font-mono-num">DELETE</strong> to confirm.
+                </div>
+              </div>
+              <input
+                type="text"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="Type DELETE"
+                className="input-base font-mono-num"
+                autoFocus
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-800/60 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2.5 rounded-lg glass glass-hover text-sm text-slate-300">
+            Cancel
+          </button>
+          <button
+            onClick={() => onDelete(mode)}
+            disabled={!canDelete}
+            className="px-4 py-2.5 rounded-lg bg-pink-500 hover:bg-pink-400 text-white text-sm font-semibold flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete {targetCount} {targetCount === 1 ? "record" : "records"}
+          </button>
         </div>
       </div>
     </div>
