@@ -331,7 +331,14 @@ export default function MetaSpendDashboard() {
   const [isFirstSetup, setIsFirstSetup] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  // Inline editing state for deposit rows
+  const [editingDepositId, setEditingDepositId] = useState(null);
+  const [editDepCount, setEditDepCount] = useState("");
+  const [editDepAmount, setEditDepAmount] = useState("");
   const [showAdminPanels, setShowAdminPanels] = useState(false);
+  // Hero strip period selector — lets bosses flip the top stat between
+  // Today / Yesterday / 7D / 30D / MTD / All-time without affecting filters below.
+  const [heroPeriod, setHeroPeriod] = useState("today");
 
   // Entry form
   const [date, setDate] = useState(todayISO());
@@ -573,6 +580,26 @@ export default function MetaSpendDashboard() {
 
   const handleDeleteDeposit = async (id) => {
     const next = deposits.filter((d) => d.id !== id);
+    setDeposits(next);
+    await persistDeposits(next);
+  };
+
+  // Update an existing deposit's count and/or amount inline.
+  // newValues is an object like { count?: number, amount?: number }
+  const handleEditDeposit = async (id, newValues) => {
+    const next = deposits.map((d) => {
+      if (d.id !== id) return d;
+      const updated = { ...d };
+      if (newValues.count !== undefined) {
+        const n = parseFloat(newValues.count);
+        if (!isNaN(n) && n >= 0) updated.count = n;
+      }
+      if (newValues.amount !== undefined) {
+        const a = parseFloat(newValues.amount);
+        if (!isNaN(a) && a >= 0) updated.amount = a;
+      }
+      return updated;
+    });
     setDeposits(next);
     await persistDeposits(next);
   };
@@ -1076,78 +1103,149 @@ export default function MetaSpendDashboard() {
           </div>
         </header>
 
-        {/* Hero today — compact horizontal stat strip */}
-        <div className="glass rounded-2xl mb-6 relative overflow-hidden">
-          <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(34,211,238,0.18), transparent 70%)" }} />
-          <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(167,139,250,0.10), transparent 70%)" }} />
+        {/* Hero — switchable period (Today / Yesterday / 7D / 30D / MTD / All-time).
+            Bosses pick what they want to see at the top without changing filters below. */}
+        {(() => {
+          // Map heroPeriod key to the right summaryStats bucket + display labels
+          const periodMap = {
+            today: { label: "Today's Spend", data: summaryStats.today, compareLabel: `vs ${formatUSD(summaryStats.yesterday.spend)} yesterday` },
+            yesterday: { label: "Yesterday's Spend", data: summaryStats.yesterday, compareLabel: null },
+            last7: { label: "Last 7 Days", data: summaryStats.last7, compareLabel: null },
+            last30: { label: "Last 30 Days", data: summaryStats.last30, compareLabel: null },
+            mtd: { label: "Month to Date", data: summaryStats.mtd, compareLabel: null },
+            allTime: { label: "All-time Spend", data: summaryStats.allTime, compareLabel: null },
+          };
+          const active = periodMap[heroPeriod] || periodMap.today;
+          const showDayCompare = heroPeriod === "today";
+          // Daily target pacing only makes sense for "today" bucket
+          const showTargetPacing = heroPeriod === "today" && config.dailyBudget > 0;
 
-          <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-0">
-            {/* Today's spend — hero */}
-            <div className="lg:col-span-4 p-6 md:p-7 lg:border-r lg:border-slate-800/60">
-              <div className="text-[10px] uppercase tracking-[0.25em] text-cyan-400/80 mb-2 flex items-center gap-1.5">
-                <Activity className="w-3 h-3" /> Today's Spend
-              </div>
-              <div className="font-mono-num text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-none mb-3">
-                {formatUSD(stats.today.spend)}
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                {stats.dod !== null && !isNaN(stats.dod) ? (
-                  <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${stats.dod >= 0 ? "bg-emerald-500/15 text-emerald-300" : "bg-pink-500/15 text-pink-300"}`}>
-                    {stats.dod >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                    <span className="font-mono-num">{stats.dod >= 0 ? "+" : ""}{stats.dod.toFixed(1)}%</span>
-                  </div>
-                ) : (
-                  <span className="text-[11px] text-slate-600">—</span>
-                )}
-                <span className="text-[11px] text-slate-500 font-mono-num">vs {formatUSD(stats.yesterday.spend)} yesterday</span>
-              </div>
-            </div>
+          return (
+            <div className="glass rounded-2xl mb-6 relative overflow-hidden">
+              <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(34,211,238,0.18), transparent 70%)" }} />
+              <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(167,139,250,0.10), transparent 70%)" }} />
 
-            {/* Today's secondary metrics — 4 columns */}
-            <div className="lg:col-span-5 grid grid-cols-2 lg:grid-cols-4 border-t lg:border-t-0 border-slate-800/60">
-              <HeroStat label="Leads" value={formatNumCompact(stats.today.leads)} icon={<Users className="w-3 h-3" />} accent="emerald" />
-              <HeroStat label="Deposits" value={formatNumCompact(stats.today.deposits)} icon={<Banknote className="w-3 h-3" />} accent="amber" />
-              <HeroStat label="CPL" value={stats.today.cpl != null ? formatUSDCompact(stats.today.cpl) : "—"} icon={<Target className="w-3 h-3" />} accent="violet" />
-              <HeroStat label="CPD" value={stats.today.cpd != null ? formatUSDCompact(stats.today.cpd) : "—"} icon={<Wallet className="w-3 h-3" />} accent="cyan" />
-            </div>
+              {/* Period switcher tabs */}
+              <div className="relative px-5 md:px-6 pt-4 pb-0 flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mr-2">Showing:</span>
+                {[
+                  { key: "today", label: "Today" },
+                  { key: "yesterday", label: "Yesterday" },
+                  { key: "last7", label: "Last 7d" },
+                  { key: "last30", label: "Last 30d" },
+                  { key: "mtd", label: "MTD" },
+                  { key: "allTime", label: "All-time" },
+                ].map((p) => (
+                  <button
+                    key={p.key}
+                    onClick={() => setHeroPeriod(p.key)}
+                    className={`px-3 py-1 rounded-md text-[11px] font-medium transition-all ${
+                      heroPeriod === p.key
+                        ? "bg-cyan-500/20 text-cyan-300 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.4)]"
+                        : "text-slate-500 hover:text-slate-200 hover:bg-slate-800/40"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
 
-            {/* Daily target pacing or empty state */}
-            <div className="lg:col-span-3 p-6 md:p-7 border-t lg:border-t-0 lg:border-l border-slate-800/60">
-              {config.dailyBudget > 0 ? (
-                <>
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-2 flex items-center gap-1.5">
-                    <Target className="w-3 h-3" /> Daily Target
+              <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-0">
+                {/* Hero spend */}
+                <div className="lg:col-span-4 p-6 md:p-7 lg:border-r lg:border-slate-800/60">
+                  <div className="text-[10px] uppercase tracking-[0.25em] text-cyan-400/80 mb-2 flex items-center gap-1.5">
+                    <Activity className="w-3 h-3" /> {active.label}
                   </div>
-                  <div className="flex items-baseline gap-2 mb-2">
-                    <span className="font-mono-num text-xl font-bold text-white">{formatUSDCompact(stats.today.spend)}</span>
-                    <span className="text-slate-500 font-mono-num text-xs">/ {formatUSDCompact(config.dailyBudget)}</span>
+                  <div className="font-mono-num text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-none mb-3">
+                    {formatUSD(active.data.spend)}
                   </div>
-                  <div className="h-1.5 bg-slate-800/60 rounded-full overflow-hidden mb-2">
-                    <div
-                      className="h-full rounded-full transition-all duration-700"
-                      style={{
-                        width: `${Math.min(budgetPct, 100)}%`,
-                        background: budgetStatus === "over" ? "#f472b6" : budgetStatus === "on" ? "#facc15" : "#22d3ee",
-                        boxShadow: `0 0 12px ${budgetStatus === "over" ? "#f472b680" : budgetStatus === "on" ? "#facc1580" : "#22d3ee80"}`,
-                      }}
-                    />
-                  </div>
-                  <div className={`text-[11px] font-medium flex items-center gap-1 ${budgetStatus === "over" ? "text-pink-400" : budgetStatus === "on" ? "text-amber-400" : "text-cyan-400"}`}>
-                    <span className="w-1 h-1 rounded-full" style={{ background: "currentColor" }} />
-                    {budgetStatus === "over" ? `${(budgetPct - 100).toFixed(0)}% over` : budgetStatus === "on" ? "On pace" : `${(100 - budgetPct).toFixed(0)}% under`}
-                  </div>
-                </>
-              ) : (
-                <div className="h-full flex flex-col items-start justify-center">
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-slate-600 mb-2 flex items-center gap-1.5">
-                    <Target className="w-3 h-3" /> Daily Target
-                  </div>
-                  <div className="text-xs text-slate-500">{isAdmin ? "Set a target in admin settings" : "Not set"}</div>
+                  {showDayCompare ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {stats.dod !== null && !isNaN(stats.dod) ? (
+                        <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${stats.dod >= 0 ? "bg-emerald-500/15 text-emerald-300" : "bg-pink-500/15 text-pink-300"}`}>
+                          {stats.dod >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                          <span className="font-mono-num">{stats.dod >= 0 ? "+" : ""}{stats.dod.toFixed(1)}%</span>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-600">—</span>
+                      )}
+                      <span className="text-[11px] text-slate-500 font-mono-num">{active.compareLabel}</span>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-500 font-mono-num">
+                      {active.data.tax > 0 && `Incl. ${formatUSDCompact(active.data.tax)} tax`}
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* Secondary metrics */}
+                <div className="lg:col-span-5 grid grid-cols-2 lg:grid-cols-4 border-t lg:border-t-0 border-slate-800/60">
+                  <HeroStat label="Leads" value={formatNumCompact(active.data.leads)} icon={<Users className="w-3 h-3" />} accent="emerald" />
+                  <HeroStat label="Deposits" value={formatNumCompact(active.data.deposits)} icon={<Banknote className="w-3 h-3" />} accent="amber" />
+                  <HeroStat label="CPL" value={active.data.cpl != null ? formatUSDCompact(active.data.cpl) : "—"} icon={<Target className="w-3 h-3" />} accent="violet" />
+                  <HeroStat label="CPD" value={active.data.cpd != null ? formatUSDCompact(active.data.cpd) : "—"} icon={<Wallet className="w-3 h-3" />} accent="cyan" />
+                </div>
+
+                {/* Right column: Daily target (today) OR period-specific extra info */}
+                <div className="lg:col-span-3 p-6 md:p-7 border-t lg:border-t-0 lg:border-l border-slate-800/60">
+                  {showTargetPacing ? (
+                    <>
+                      <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-2 flex items-center gap-1.5">
+                        <Target className="w-3 h-3" /> Daily Target
+                      </div>
+                      <div className="flex items-baseline gap-2 mb-2">
+                        <span className="font-mono-num text-xl font-bold text-white">{formatUSDCompact(active.data.spend)}</span>
+                        <span className="text-slate-500 font-mono-num text-xs">/ {formatUSDCompact(config.dailyBudget)}</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-800/60 rounded-full overflow-hidden mb-2">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{
+                            width: `${Math.min(budgetPct, 100)}%`,
+                            background: budgetStatus === "over" ? "#f472b6" : budgetStatus === "on" ? "#facc15" : "#22d3ee",
+                            boxShadow: `0 0 12px ${budgetStatus === "over" ? "#f472b680" : budgetStatus === "on" ? "#facc1580" : "#22d3ee80"}`,
+                          }}
+                        />
+                      </div>
+                      <div className={`text-[11px] font-medium flex items-center gap-1 ${budgetStatus === "over" ? "text-pink-400" : budgetStatus === "on" ? "text-amber-400" : "text-cyan-400"}`}>
+                        <span className="w-1 h-1 rounded-full" style={{ background: "currentColor" }} />
+                        {budgetStatus === "over" ? `${(budgetPct - 100).toFixed(0)}% over` : budgetStatus === "on" ? "On pace" : `${(100 - budgetPct).toFixed(0)}% under`}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-2 flex items-center gap-1.5">
+                        <Activity className="w-3 h-3" /> Period Detail
+                      </div>
+                      <div className="space-y-1.5 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Impressions</span>
+                          <span className="font-mono-num text-slate-200">{active.data.impressions ? formatNumCompact(active.data.impressions) : "—"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Clicks</span>
+                          <span className="font-mono-num text-slate-200">{active.data.clicks ? formatNumCompact(active.data.clicks) : "—"}</span>
+                        </div>
+                        {active.data.l2d != null && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Lead → Dep</span>
+                            <span className="font-mono-num text-slate-200">{formatPct(active.data.l2d)}</span>
+                          </div>
+                        )}
+                        {active.data.tax > 0 && (
+                          <div className="flex justify-between border-t border-slate-800/60 pt-1.5 mt-1.5">
+                            <span className="text-slate-500">Tax incl.</span>
+                            <span className="font-mono-num text-amber-300">{formatUSDCompact(active.data.tax)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Performance Summary — multi-period numbers at a glance */}
         <div className="glass rounded-2xl overflow-hidden mb-8">
@@ -2059,21 +2157,132 @@ export default function MetaSpendDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDeposits.map((d) => (
-                    <tr key={d.id} className="border-b border-slate-800/40 hover:bg-slate-800/20">
-                      <td className="px-4 py-3 text-slate-200 font-mono-num text-xs whitespace-nowrap">{formatDate(d.date)}</td>
-                      <td className="px-4 py-3 text-slate-200 text-xs">
-                        <span className="mr-1.5">{flagFor(d.geo)}</span>{d.geo}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono-num text-amber-300 text-xs font-semibold">{formatNum(d.count)}</td>
-                      <td className="px-4 py-3 text-right font-mono-num text-emerald-300 text-xs font-semibold">{d.amount ? formatUSD(d.amount) : "—"}</td>
-                      {isAdmin && (
-                        <td className="px-4 py-3"><div className="flex items-center justify-end">
-                          <button onClick={() => handleDeleteDeposit(d.id)} className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-pink-400"><Trash2 className="w-3.5 h-3.5" /></button>
-                        </div></td>
-                      )}
-                    </tr>
-                  ))}
+                  {filteredDeposits.map((d) => {
+                    const isEditing = editingDepositId === d.id;
+                    const startEditing = () => {
+                      if (!isAdmin) return;
+                      setEditingDepositId(d.id);
+                      setEditDepCount(String(d.count || ""));
+                      setEditDepAmount(String(d.amount || ""));
+                    };
+                    const saveEdit = async () => {
+                      await handleEditDeposit(d.id, { count: editDepCount, amount: editDepAmount });
+                      setEditingDepositId(null);
+                    };
+                    const cancelEdit = () => {
+                      setEditingDepositId(null);
+                      setEditDepCount("");
+                      setEditDepAmount("");
+                    };
+                    return (
+                      <tr
+                        key={d.id}
+                        className={`border-b border-slate-800/40 transition-colors ${
+                          isEditing ? "bg-cyan-500/5" : "hover:bg-slate-800/20"
+                        }`}
+                      >
+                        <td className="px-4 py-3 text-slate-200 font-mono-num text-xs whitespace-nowrap">{formatDate(d.date)}</td>
+                        <td className="px-4 py-3 text-slate-200 text-xs">
+                          <span className="mr-1.5">{flagFor(d.geo)}</span>{d.geo}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={editDepCount}
+                              onChange={(e) => setEditDepCount(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveEdit();
+                                if (e.key === "Escape") cancelEdit();
+                              }}
+                              autoFocus
+                              className="w-20 px-2 py-1 text-right rounded bg-slate-900/80 border border-cyan-500/40 text-amber-300 text-xs font-mono-num focus:outline-none focus:border-cyan-500"
+                            />
+                          ) : (
+                            <span
+                              onClick={startEditing}
+                              className={`font-mono-num text-amber-300 text-xs font-semibold ${
+                                isAdmin ? "cursor-pointer hover:bg-slate-800/40 px-2 py-1 -mx-2 -my-1 rounded transition-colors" : ""
+                              }`}
+                              title={isAdmin ? "Click to edit" : undefined}
+                            >
+                              {formatNum(d.count)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {isEditing ? (
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={editDepAmount}
+                              onChange={(e) => setEditDepAmount(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveEdit();
+                                if (e.key === "Escape") cancelEdit();
+                              }}
+                              placeholder="0.00"
+                              className="w-24 px-2 py-1 text-right rounded bg-slate-900/80 border border-cyan-500/40 text-emerald-300 text-xs font-mono-num focus:outline-none focus:border-cyan-500"
+                            />
+                          ) : (
+                            <span
+                              onClick={startEditing}
+                              className={`font-mono-num text-emerald-300 text-xs font-semibold ${
+                                isAdmin ? "cursor-pointer hover:bg-slate-800/40 px-2 py-1 -mx-2 -my-1 rounded transition-colors" : ""
+                              }`}
+                              title={isAdmin ? "Click to edit" : undefined}
+                            >
+                              {d.amount ? formatUSD(d.amount) : (isAdmin ? <span className="text-slate-600">add…</span> : "—")}
+                            </span>
+                          )}
+                        </td>
+                        {isAdmin && (
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              {isEditing ? (
+                                <>
+                                  <button
+                                    onClick={saveEdit}
+                                    className="p-1.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300"
+                                    title="Save (Enter)"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={cancelEdit}
+                                    className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400"
+                                    title="Cancel (Esc)"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={startEditing}
+                                    className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-cyan-300"
+                                    title="Edit"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteDeposit(d.id)}
+                                    className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-pink-400"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-900/40">
