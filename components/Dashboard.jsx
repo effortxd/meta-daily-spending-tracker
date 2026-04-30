@@ -10,6 +10,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine,
 } from "recharts";
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
 import { storage } from "@/lib/storage";
 
 const ENTRIES_KEY = "meta_spend_entries_v3";
@@ -41,6 +42,7 @@ const DEPOSIT_FIELD_OPTIONS = [
   { value: "date", label: "Date" },
   { value: "geo", label: "Geo / Country" },
   { value: "count", label: "Deposit Count" },
+  { value: "amount", label: "Deposit Amount (USD)" },
 ];
 
 const COLUMN_PATTERNS = [
@@ -57,7 +59,31 @@ const COLUMN_PATTERNS = [
 const DEPOSIT_COLUMN_PATTERNS = [
   { field: "date", pattern: /^(date|day)/i },
   { field: "geo", pattern: /^(country|geo|region|location|market)/i },
-  { field: "count", pattern: /^(deposits?|count|deposit[\s_.-]*count|total[\s_.-]*deposits?|ftd|first[\s_.-]*deposit)/i },
+  { field: "amount", pattern: /^(amount[\s_().]*usd|deposit[\s_.-]*amount|total[\s_.-]*amount|usd[\s_.-]*amount|volume)/i },
+  { field: "count", pattern: /^(deposits?|count|deposit[\s_.-]*count|total[\s_.-]*deposits?|ftd|first[\s_.-]*deposit|num[\s_.-]*deposits?)/i },
+];
+
+// CRM-style deposits: each row is one transaction. The dashboard aggregates
+// transaction rows into date+country buckets at import time.
+// Country comes from the Source column prefix (e.g. "TH_LP_DC2_2026" → Thailand).
+// Amount uses "Actual Payment Amount(USD)" — what the customer actually paid in USD.
+const CRM_DEPOSIT_FIELD_OPTIONS = [
+  { value: "skip", label: "— Skip —" },
+  { value: "datetime", label: "Submission Date/Time" },
+  { value: "source", label: "Source (→ Country)" },
+  { value: "amount_usd", label: "Actual Payment Amount (USD)" },
+  { value: "currency", label: "Payment Currency (fallback for Country)" },
+];
+
+const CRM_DEPOSIT_COLUMN_PATTERNS = [
+  // Prefer "Submission Time" over "Processing Time" (first match wins via dedup)
+  { field: "datetime", pattern: /^(submission[\s_.-]*time|submitted[\s_.-]*at|order[\s_.-]*time|created[\s_.-]*at|date[\s_.-]*time)/i },
+  // Source column prefix gives explicit country code (TH_, ID_, etc.) — preferred over currency guess
+  { field: "source", pattern: /^(source|order[\s_.-]*source|utm|campaign|landing[\s_.-]*page)\b/i },
+  // "Actual Payment Amount(USD)" — what the user explicitly asked for. Matches with or without space before (USD)
+  { field: "amount_usd", pattern: /^actual[\s_.-]*payment[\s_.-]*amount[\s_().]*usd/i },
+  // Fallback amount field — only if no "Actual Payment Amount(USD)" exists
+  { field: "currency", pattern: /^(payment[\s_.-]*currency)\b/i },
 ];
 
 // Country code → full name normalization for imports.
@@ -89,6 +115,21 @@ const COUNTRY_NORMALIZE = {
   IN: "India", PK: "Pakistan", BD: "Bangladesh",
   AE: "United Arab Emirates", SA: "Saudi Arabia",
   EG: "Egypt", TR: "Turkey", ZA: "South Africa", NG: "Nigeria", KE: "Kenya", GH: "Ghana",
+};
+
+// Map ISO currency codes → country names. Used by CRM deposit imports
+// where the country is implicit in the payment currency.
+const CURRENCY_TO_COUNTRY = {
+  THB: "Thailand", IDR: "Indonesia", VND: "Vietnam", PHP: "Philippines",
+  MYR: "Malaysia", SGD: "Singapore", KHR: "Cambodia", LAK: "Laos", MMK: "Myanmar",
+  BRL: "Brazil", MXN: "Mexico", ARS: "Argentina", CLP: "Chile", COP: "Colombia",
+  PEN: "Peru", UYU: "Uruguay", BOB: "Bolivia",
+  USD: "United States", CAD: "Canada", GBP: "United Kingdom", EUR: "Multi-country",
+  AUD: "Australia", NZD: "New Zealand", JPY: "Japan", KRW: "South Korea",
+  CNY: "China", HKD: "Hong Kong", TWD: "Taiwan", INR: "India",
+  AED: "United Arab Emirates", SAR: "Saudi Arabia", ZAR: "South Africa",
+  TRY: "Turkey", EGP: "Egypt", NGN: "Nigeria",
+  USDT: "Multi-country", USDC: "Multi-country",
 };
 
 function normalizeGeo(input) {
@@ -261,6 +302,7 @@ const aggregate = (entryList, depositList = [], taxRate = 0) => {
     { spend: 0, impressions: 0, clicks: 0, leads: 0, deposits: 0 }
   );
   totals.deposits = depositList.reduce((s, d) => s + (d.count || 0), 0);
+  totals.depositAmount = depositList.reduce((s, d) => s + (d.amount || 0), 0);
   // Tax applied to spend before deriving cost-based metrics, so CPL/CPD/CPC reflect true cost
   totals.rawSpend = totals.spend;
   totals.spend = totals.spend * (1 + (taxRate || 0));
@@ -307,10 +349,12 @@ export default function MetaSpendDashboard() {
   // Deposit form (multi-row)
   const [depositDate, setDepositDate] = useState(todayISO());
   const [depositCounts, setDepositCounts] = useState({});
+  const [depositAmounts, setDepositAmounts] = useState({});
   // Quick-add deposit row (lives at the top of the deposits table — admin only)
   const [qDate, setQDate] = useState(todayISO());
   const [qGeo, setQGeo] = useState("");
   const [qCount, setQCount] = useState("");
+  const [qAmount, setQAmount] = useState("");
   const [qBusy, setQBusy] = useState(false);
   const [qFlash, setQFlash] = useState(null); // { type: 'ok' | 'err', text: string }
   const [activeGeos, setActiveGeos] = useState(["Brazil", "Mexico", "Indonesia", "Thailand"]);
@@ -495,10 +539,12 @@ export default function MetaSpendDashboard() {
     let next = deposits.filter((d) => d.date !== depositDate);
     Object.entries(depositCounts).forEach(([g, c]) => {
       const n = parseFloat(c);
+      const amt = parseFloat(depositAmounts[g] || "");
       if (!isNaN(n) && n > 0) {
         next.push({
           id: Date.now().toString() + Math.random().toString(36).slice(2, 7) + g,
           date: depositDate, geo: g, count: n,
+          amount: !isNaN(amt) && amt > 0 ? amt : 0,
           createdAt: new Date().toISOString(),
         });
       }
@@ -509,13 +555,15 @@ export default function MetaSpendDashboard() {
 
   // Quick-add a single deposit row without replacing the whole day.
   // If a record exists for that date+geo, it gets replaced (typed value wins).
-  const handleQuickAddDeposit = async (date, geo, count) => {
+  const handleQuickAddDeposit = async (date, geo, count, amount) => {
     const n = parseFloat(count);
+    const a = parseFloat(amount);
     if (!date || !geo || isNaN(n) || n <= 0) return false;
     const next = deposits.filter((d) => !(d.date === date && d.geo === geo));
     next.push({
       id: Date.now().toString() + Math.random().toString(36).slice(2, 7) + geo,
       date, geo, count: n,
+      amount: !isNaN(a) && a > 0 ? a : 0,
       createdAt: new Date().toISOString(),
     });
     setDeposits(next);
@@ -607,6 +655,7 @@ export default function MetaSpendDashboard() {
       let toAdd = data.map((d) => ({
         id: Date.now().toString() + Math.random().toString(36).slice(2, 9),
         date: d.date, geo: d.geo || "Other", count: d.count || 0,
+        amount: d.amount || 0,
         createdAt: new Date().toISOString(),
       }));
       let next = [...deposits];
@@ -1912,7 +1961,7 @@ export default function MetaSpendDashboard() {
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr_140px_auto] gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr_110px_140px_auto] gap-2">
                 <input
                   type="date"
                   value={qDate}
@@ -1935,29 +1984,38 @@ export default function MetaSpendDashboard() {
                   step="1"
                   value={qCount}
                   onChange={(e) => setQCount(e.target.value)}
+                  placeholder="Count"
+                  className="input-base text-sm font-mono-num"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={qAmount}
+                  onChange={(e) => setQAmount(e.target.value)}
                   onKeyDown={async (e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      const ok = await handleQuickAddDeposit(qDate, qGeo, qCount);
+                      const ok = await handleQuickAddDeposit(qDate, qGeo, qCount, qAmount);
                       if (ok) {
                         setQFlash({ type: "ok", text: "Saved" });
-                        setQGeo(""); setQCount("");
+                        setQGeo(""); setQCount(""); setQAmount("");
                       } else {
                         setQFlash({ type: "err", text: "Pick country & count > 0" });
                       }
                       setTimeout(() => setQFlash(null), 2000);
                     }
                   }}
-                  placeholder="Count"
+                  placeholder="USD amount (opt)"
                   className="input-base text-sm font-mono-num"
                 />
                 <button
                   onClick={async () => {
                     setQBusy(true);
-                    const ok = await handleQuickAddDeposit(qDate, qGeo, qCount);
+                    const ok = await handleQuickAddDeposit(qDate, qGeo, qCount, qAmount);
                     if (ok) {
                       setQFlash({ type: "ok", text: "Saved" });
-                      setQGeo(""); setQCount("");
+                      setQGeo(""); setQCount(""); setQAmount("");
                     } else {
                       setQFlash({ type: "err", text: "Pick country & count > 0" });
                     }
@@ -1976,7 +2034,7 @@ export default function MetaSpendDashboard() {
                 return (
                   <p className="text-[11px] text-amber-400/70 mt-2 flex items-center gap-1.5">
                     <AlertCircle className="w-3 h-3" />
-                    Existing record: <span className="font-mono-num font-semibold">{existing.count}</span> deposits — saving will overwrite
+                    Existing record: <span className="font-mono-num font-semibold">{existing.count}</span> deposits{existing.amount ? ` · ${formatUSD(existing.amount)}` : ""} — saving will overwrite
                   </p>
                 );
               })()}
@@ -1996,6 +2054,7 @@ export default function MetaSpendDashboard() {
                     <th className="text-left px-4 py-3 font-medium">Date</th>
                     <th className="text-left px-4 py-3 font-medium">Country</th>
                     <th className="text-right px-4 py-3 font-medium">Deposits</th>
+                    <th className="text-right px-4 py-3 font-medium">Amount (USD)</th>
                     {isAdmin && <th className="px-4 py-3"></th>}
                   </tr>
                 </thead>
@@ -2007,6 +2066,7 @@ export default function MetaSpendDashboard() {
                         <span className="mr-1.5">{flagFor(d.geo)}</span>{d.geo}
                       </td>
                       <td className="px-4 py-3 text-right font-mono-num text-amber-300 text-xs font-semibold">{formatNum(d.count)}</td>
+                      <td className="px-4 py-3 text-right font-mono-num text-emerald-300 text-xs font-semibold">{d.amount ? formatUSD(d.amount) : "—"}</td>
                       {isAdmin && (
                         <td className="px-4 py-3"><div className="flex items-center justify-end">
                           <button onClick={() => handleDeleteDeposit(d.id)} className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-pink-400"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -2019,6 +2079,7 @@ export default function MetaSpendDashboard() {
                   <tr className="bg-slate-900/40">
                     <td colSpan={2} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400">Period total</td>
                     <td className="px-4 py-3 text-right font-mono-num text-amber-300 font-bold text-xs">{formatNum(stats.total.deposits)}</td>
+                    <td className="px-4 py-3 text-right font-mono-num text-emerald-300 font-bold text-xs">{stats.total.depositAmount ? formatUSD(stats.total.depositAmount) : "—"}</td>
                     {isAdmin && <td></td>}
                   </tr>
                 </tfoot>
@@ -2159,8 +2220,12 @@ function ImportModal({ onClose, onImport }) {
   const fileInputRef = useRef(null);
   const csvInputRef = useRef(null);
 
-  const fieldOptions = dataType === "entries" ? FIELD_OPTIONS : DEPOSIT_FIELD_OPTIONS;
-  const patterns = dataType === "entries" ? COLUMN_PATTERNS : DEPOSIT_COLUMN_PATTERNS;
+  const fieldOptions = dataType === "entries" ? FIELD_OPTIONS
+    : dataType === "crm_deposits" ? CRM_DEPOSIT_FIELD_OPTIONS
+    : DEPOSIT_FIELD_OPTIONS;
+  const patterns = dataType === "entries" ? COLUMN_PATTERNS
+    : dataType === "crm_deposits" ? CRM_DEPOSIT_COLUMN_PATTERNS
+    : DEPOSIT_COLUMN_PATTERNS;
 
   // Reset preview when data type changes
   useEffect(() => {
@@ -2205,13 +2270,48 @@ function ImportModal({ onClose, onImport }) {
   const handleCsvFile = (file) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
-      setPasteText(text);
-      setTab("paste");
-      parseTabular(text);
+    // Detect if file is actually an Excel binary even with a .csv extension.
+    // CRM exports (like the WeTrade Deposit Statistic) frequently do this.
+    const isExcelByExt = /\.(xlsx|xls|xlsm)$/i.test(file.name);
+    const tryAsExcel = (buffer) => {
+      try {
+        const wb = XLSX.read(buffer, { type: "array" });
+        const sheetName = wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        // Convert to CSV, then run through the same parsing path
+        const csv = XLSX.utils.sheet_to_csv(ws, { FS: "," });
+        setPasteText(csv);
+        setTab("paste");
+        parseTabular(csv);
+        return true;
+      } catch (err) {
+        return false;
+      }
     };
-    reader.readAsText(file);
+
+    reader.onload = (e) => {
+      const result = e.target.result;
+      // Check first bytes for XLSX (PK zip signature) or older XLS (D0 CF)
+      if (result instanceof ArrayBuffer) {
+        const bytes = new Uint8Array(result.slice(0, 4));
+        const isZip = bytes[0] === 0x50 && bytes[1] === 0x4B; // "PK"
+        const isOldExcel = bytes[0] === 0xD0 && bytes[1] === 0xCF;
+        if (isZip || isOldExcel || isExcelByExt) {
+          if (tryAsExcel(result)) return;
+        }
+        // Fall back to text parsing
+        const text = new TextDecoder().decode(result);
+        setPasteText(text);
+        setTab("paste");
+        parseTabular(text);
+      } else {
+        setPasteText(result);
+        setTab("paste");
+        parseTabular(result);
+      }
+    };
+    // Read as ArrayBuffer so we can sniff the file type
+    reader.readAsArrayBuffer(file);
   };
 
   const handleImageDrop = (file) => {
@@ -2295,6 +2395,71 @@ function ImportModal({ onClose, onImport }) {
   const buildEntriesFromTabular = () => {
     if (!parsedRows) return [];
     const out = [];
+
+    // CRM deposits special path: each row is one transaction. Aggregate
+    // by date+country before emitting deposit records. Each output row gets:
+    //   { date, geo, count: <#transactions>, amount: <sum of USD amounts> }
+    // Country resolution priority: Source column prefix (TH_, ID_, etc.)
+    //   → Currency code mapping (THB → Thailand) → defaultGeo fallback.
+    if (dataType === "crm_deposits") {
+      const buckets = new Map(); // key: `${date}|${country}` → { count, amount }
+      parsedRows.forEach((row) => {
+        let dateRaw = null, currency = null, sourceText = null, amount = 0, geo = null;
+        columnMapping.forEach((field, i) => {
+          if (field === "skip") return;
+          const v = row[i];
+          if (field === "datetime") {
+            // Handle "29/04/2026 21:42:36" or "2026-04-29 21:42:36" or just date
+            const s = String(v || "").trim();
+            if (!s) return;
+            const datePart = s.split(/[\sT]/)[0];
+            // Try DD/MM/YYYY first (CRM is European-style), then ISO
+            const ddmmyyyy = datePart.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+            if (ddmmyyyy) {
+              const [, d, m, y] = ddmmyyyy;
+              dateRaw = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+            } else {
+              dateRaw = parseDate(datePart);
+            }
+          } else if (field === "currency") {
+            currency = String(v || "").trim().toUpperCase();
+          } else if (field === "source") {
+            sourceText = String(v || "").trim();
+          } else if (field === "amount_usd") {
+            const n = parseNumberLoose(v);
+            if (n != null) amount = n;
+          }
+        });
+
+        // Country resolution: Source first (most reliable), then currency, then default
+        if (sourceText) {
+          // Try to extract country code from source string like "TH_LP_DC2_2026" or "ID_LP_DC1_2026"
+          const codeMatch = sourceText.match(/^([A-Za-z]{2,6})[_\-\s]/);
+          if (codeMatch) {
+            const code = codeMatch[1].toUpperCase();
+            if (COUNTRY_NORMALIZE[code]) geo = COUNTRY_NORMALIZE[code];
+            else if (REGION_CODES[code]) geo = REGION_CODES[code];
+          }
+        }
+        if (!geo && currency && CURRENCY_TO_COUNTRY[currency]) {
+          geo = CURRENCY_TO_COUNTRY[currency];
+        }
+        if (!geo && defaultGeo) geo = defaultGeo;
+        if (!dateRaw || !geo) return;
+
+        const key = `${dateRaw}|${geo}`;
+        const existing = buckets.get(key) || { count: 0, amount: 0 };
+        existing.count += 1;
+        existing.amount += amount;
+        buckets.set(key, existing);
+      });
+      buckets.forEach(({ count, amount }, key) => {
+        const [date, geo] = key.split("|");
+        out.push({ date, geo, count, amount: parseFloat(amount.toFixed(2)) });
+      });
+      return out;
+    }
+
     parsedRows.forEach((row) => {
       if (dataType === "entries") {
         const entry = { date: null, account: defaultAccount || "Other", geo: defaultGeo || "", amount: 0, impressions: 0, clicks: 0, leads: 0, notes: "" };
@@ -2330,13 +2495,14 @@ function ImportModal({ onClose, onImport }) {
         }
         if (entry.date && entry.amount > 0) out.push(entry);
       } else {
-        const entry = { date: null, geo: defaultGeo || "", count: 0 };
+        const entry = { date: null, geo: defaultGeo || "", count: 0, amount: 0 };
         columnMapping.forEach((field, i) => {
           if (field === "skip") return;
           const v = row[i];
           if (field === "date") entry.date = parseDate(v);
           else if (field === "geo") entry.geo = normalizeGeo(String(v || "").trim()) || entry.geo;
           else if (field === "count") { const n = parseNumberLoose(v); if (n != null) entry.count = n; }
+          else if (field === "amount") { const n = parseNumberLoose(v); if (n != null) entry.amount = n; }
         });
         if (entry.date && entry.count > 0 && entry.geo) out.push(entry);
       }
@@ -2349,11 +2515,21 @@ function ImportModal({ onClose, onImport }) {
     if (built.length === 0) {
       setError(dataType === "entries"
         ? "No valid rows. Make sure Date and Spend columns are mapped correctly."
+        : dataType === "crm_deposits"
+        ? "No valid rows. Make sure Submission Time and Payment Currency columns are mapped. Unrecognized currencies are skipped — set a default country if needed."
         : "No valid rows. Make sure Date, Geo, and Count columns are mapped correctly.");
       return;
     }
-    const added = await onImport(built, dataType, { skipDuplicates });
-    alert(`Imported ${added} ${dataType === "entries" ? "entries" : "deposit records"}${skipDuplicates && added < built.length ? ` (${built.length - added} duplicates ${dataType === "deposits" ? "replaced" : "skipped"})` : ""}`);
+    // CRM deposits route through the "deposits" handler since they share data shape
+    const importType = dataType === "crm_deposits" ? "deposits" : dataType;
+    const added = await onImport(built, importType, { skipDuplicates });
+    if (dataType === "crm_deposits") {
+      const totalDeposits = built.reduce((s, b) => s + b.count, 0);
+      const totalAmount = built.reduce((s, b) => s + (b.amount || 0), 0);
+      alert(`Imported ${totalDeposits} deposits totaling $${totalAmount.toFixed(2)} across ${added} date×country buckets`);
+    } else {
+      alert(`Imported ${added} ${dataType === "entries" ? "entries" : "deposit records"}${skipDuplicates && added < built.length ? ` (${built.length - added} duplicates ${dataType === "deposits" ? "replaced" : "skipped"})` : ""}`);
+    }
   };
 
   const handleConfirmImage = async () => {
@@ -2394,7 +2570,15 @@ function ImportModal({ onClose, onImport }) {
             <button onClick={() => setDataType("deposits")} className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${dataType === "deposits" ? "bg-amber-500/20 text-amber-300 border border-amber-500/40" : "glass glass-hover text-slate-400"}`}>
               <Banknote className="w-4 h-4" /> Daily deposits <span className="text-[10px] opacity-70">(by country)</span>
             </button>
+            <button onClick={() => setDataType("crm_deposits")} className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${dataType === "crm_deposits" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "glass glass-hover text-slate-400"}`}>
+              <Wallet className="w-4 h-4" /> CRM deposits <span className="text-[10px] opacity-70">(transaction list)</span>
+            </button>
           </div>
+          {dataType === "crm_deposits" && (
+            <p className="text-[11px] text-emerald-400/80 mt-2">
+              Auto-aggregates transactions by date + country. Country detected from Source prefix (e.g. <span className="font-mono">TH_LP_DC2_2026</span> → Thailand). Amount uses <span className="font-mono">Actual Payment Amount(USD)</span>.
+            </p>
+          )}
         </div>
 
         {/* Source tabs */}
@@ -2446,7 +2630,7 @@ function ImportModal({ onClose, onImport }) {
               <FileSpreadsheet className="w-12 h-12 mx-auto text-slate-600 mb-3" />
               <p className="text-sm text-slate-300 mb-1">Drop a CSV file here, or click to browse</p>
               <p className="text-xs text-slate-500">{dataType === "entries" ? "Works with Meta Ads Manager exports and standard CSVs" : "CSV with Date, Country, and Count columns"}</p>
-              <input ref={csvInputRef} type="file" accept=".csv,.tsv,.txt" onChange={(e) => handleCsvFile(e.target.files[0])} className="hidden" />
+              <input ref={csvInputRef} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm" onChange={(e) => handleCsvFile(e.target.files[0])} className="hidden" />
             </div>
           )}
 
