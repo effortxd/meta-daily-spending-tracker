@@ -578,6 +578,7 @@ export default function MetaSpendDashboard() {
   const [date, setDate] = useState(todayISO());
   const [account, setAccount] = useState(DEFAULT_ACCOUNTS[0]);
   const [customAccount, setCustomAccount] = useState("");
+  const [campaign, setCampaign] = useState("");
   const [geo, setGeo] = useState(COMMON_GEOS[0]);
   const [customGeo, setCustomGeo] = useState("");
   const [amount, setAmount] = useState("");
@@ -725,6 +726,7 @@ export default function MetaSpendDashboard() {
   const resetEntryForm = () => {
     setDate(todayISO());
     setAccount(DEFAULT_ACCOUNTS[0]); setCustomAccount("");
+    setCampaign("");
     setGeo(COMMON_GEOS[0]); setCustomGeo("");
     setAmount(""); setImpressions(""); setClicks(""); setLeads(""); setNotes("");
     setEditId(null);
@@ -738,7 +740,7 @@ export default function MetaSpendDashboard() {
     const parseOpt = (v) => { const n = parseFloat(v); return isNaN(n) || n < 0 ? 0 : n; };
     let next;
     const data = {
-      date, account: finalAccount, geo: finalGeo, amount: amt,
+      date, account: finalAccount, campaign: campaign.trim(), geo: finalGeo, amount: amt,
       impressions: parseOpt(impressions), clicks: parseOpt(clicks), leads: parseOpt(leads),
       notes: notes.trim(),
     };
@@ -760,6 +762,7 @@ export default function MetaSpendDashboard() {
     setDate(e.date);
     if (DEFAULT_ACCOUNTS.includes(e.account)) { setAccount(e.account); setCustomAccount(""); }
     else { setAccount("Other"); setCustomAccount(e.account); }
+    setCampaign(e.campaign || "");
     if (COMMON_GEOS.includes(e.geo)) { setGeo(e.geo); setCustomGeo(""); }
     else if (e.geo) { setGeo("Other"); setCustomGeo(e.geo); }
     else { setGeo(COMMON_GEOS[0]); }
@@ -768,7 +771,13 @@ export default function MetaSpendDashboard() {
     setClicks(e.clicks ? String(e.clicks) : "");
     setLeads(e.leads ? String(e.leads) : "");
     setNotes(e.notes || "");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    // Scroll to the form. The form's anchor id lets us land directly on the
+    // form rather than the very top of the page (which used to feel disorienting).
+    setTimeout(() => {
+      const el = document.getElementById("entry-form-anchor");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      else window.scrollTo({ top: 0, behavior: "smooth" });
+    }, 50);
   };
 
   const handleDeleteEntry = async (id) => {
@@ -2032,7 +2041,7 @@ export default function MetaSpendDashboard() {
 
         {/* Admin: campaign entry form */}
         {isAdmin && showAdminPanels && (
-          <div className="glass rounded-2xl p-5 md:p-6 mb-6 border-cyan-500/20">
+          <div id="entry-form-anchor" className="glass rounded-2xl p-5 md:p-6 mb-6 border-cyan-500/20">
             <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
               <div>
                 <h2 className="font-display text-lg font-bold text-white flex items-center gap-2"><Lock className="w-4 h-4 text-cyan-400" />{editId ? "Edit Campaign Entry" : "Add Campaign Entry"}</h2>
@@ -2056,6 +2065,23 @@ export default function MetaSpendDashboard() {
                 </select>
               </Field>
               {account === "Other" && <Field label="Custom account"><input type="text" value={customAccount} onChange={(e) => setCustomAccount(e.target.value)} placeholder="e.g. WeTrade BR" className="input-base" /></Field>}
+              <div className="md:col-span-2">
+                <Field label="Campaign name">
+                  <input
+                    type="text"
+                    value={campaign}
+                    onChange={(e) => setCampaign(e.target.value)}
+                    placeholder="e.g. Million Dollar Live Trading - Leads"
+                    list="campaign-suggestions"
+                    className="input-base"
+                  />
+                  {allCampaigns.length > 0 && (
+                    <datalist id="campaign-suggestions">
+                      {allCampaigns.map((c) => <option key={c} value={c} />)}
+                    </datalist>
+                  )}
+                </Field>
+              </div>
               <Field label="Geo">
                 <select value={geo} onChange={(e) => setGeo(e.target.value)} className="input-base">
                   {COMMON_GEOS.map((g) => <option key={g} value={g}>{g}</option>)}
@@ -2064,15 +2090,24 @@ export default function MetaSpendDashboard() {
               {geo === "Other" && <Field label="Custom geo"><input type="text" value={customGeo} onChange={(e) => setCustomGeo(e.target.value)} placeholder="e.g. UAE" className="input-base" /></Field>}
               <Field label="Spend (USD) *">
                 <div className="relative">
-                  <DollarSign className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="input-base pl-11 font-mono-num" />
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="input-base font-mono-num"
+                    style={{ paddingLeft: "1.75rem" }}
+                  />
                 </div>
               </Field>
               <Field label="Impressions"><input type="number" min="0" value={impressions} onChange={(e) => setImpressions(e.target.value)} placeholder="0" className="input-base font-mono-num" /></Field>
               <Field label="Clicks"><input type="number" min="0" value={clicks} onChange={(e) => setClicks(e.target.value)} placeholder="0" className="input-base font-mono-num" /></Field>
               <Field label={t("Leads")}><input type="number" min="0" value={leads} onChange={(e) => setLeads(e.target.value)} placeholder="0" className="input-base font-mono-num" /></Field>
               <div className="md:col-span-2 lg:col-span-4">
-                <Field label="Notes (optional)"><input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Campaign name or context" className="input-base" /></Field>
+                <Field label="Notes (optional)"><input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Internal notes or context" className="input-base" /></Field>
               </div>
             </div>
 
@@ -2094,8 +2129,8 @@ export default function MetaSpendDashboard() {
                 <label className="text-xs uppercase tracking-wider text-slate-400 mb-1.5 flex items-center gap-1.5"><Target className="w-3.5 h-3.5" />Daily Target (USD)</label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    <DollarSign className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <input type="number" step="0.01" min="0" value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)} placeholder="e.g. 5000" className="input-base pl-11 font-mono-num" />
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">$</span>
+                    <input type="number" step="0.01" min="0" value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)} placeholder="e.g. 5000" className="input-base font-mono-num" style={{ paddingLeft: "1.75rem" }} />
                   </div>
                   <button onClick={saveBudget} className="px-4 py-2.5 rounded-lg glass glass-hover text-sm text-slate-200">Save</button>
                 </div>
@@ -2217,8 +2252,8 @@ export default function MetaSpendDashboard() {
               )}
               <Field label="Amount (USD)">
                 <div className="relative">
-                  <DollarSign className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input type="number" step="0.01" min="0" value={topupAmount} onChange={(e) => setTopupAmount(e.target.value)} placeholder="5000.00" className="input-base pl-11 font-mono-num" />
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">$</span>
+                  <input type="number" step="0.01" min="0" value={topupAmount} onChange={(e) => setTopupAmount(e.target.value)} placeholder="5000.00" className="input-base font-mono-num" style={{ paddingLeft: "1.75rem" }} />
                 </div>
               </Field>
               <div className={topupAccount === "Other" ? "md:col-span-2 lg:col-span-4" : "md:col-span-2 lg:col-span-1"}>
