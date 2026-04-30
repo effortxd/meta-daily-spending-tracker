@@ -166,6 +166,179 @@ const COUNTRY_FLAGS = {
 
 const flagFor = (geo) => COUNTRY_FLAGS[geo] || "🏳️";
 
+// ===== I18N =====
+// English (default) and Simplified Chinese translations.
+// Keys are stable English strings; values are the localized output.
+// To add another language, add a new key under TRANSLATIONS with the same shape.
+const TRANSLATIONS = {
+  en: null, // null = use the key verbatim
+  zh: {
+    // Header & status
+    "Daily Performance Dashboard": "每日业绩仪表板",
+    "LIVE · META ADS PERFORMANCE": "实时 · META 广告表现",
+    "Updated just now": "刚刚更新",
+    "Updated": "更新于",
+    "Spend incl.": "支出含",
+    "tax": "税",
+    "Export": "导出",
+    "Admin": "管理员",
+    "Import": "导入",
+    "Bulk delete": "批量删除",
+    "Refresh": "刷新",
+    "Lock": "锁定",
+
+    // Hero & periods
+    "Showing:": "显示：",
+    "Today": "今日",
+    "Yesterday": "昨日",
+    "Last 7d": "近7天",
+    "Last 30d": "近30天",
+    "MTD": "本月至今",
+    "All-time": "全部时间",
+    "Today's Spend": "今日支出",
+    "Yesterday's Spend": "昨日支出",
+    "Last 7 Days": "近7天",
+    "Last 30 Days": "近30天",
+    "Month to Date": "本月至今",
+    "All-time Spend": "累计支出",
+    "Daily Target": "每日目标",
+    "Period Detail": "时段详情",
+    "Impressions": "展示量",
+    "Clicks": "点击量",
+    "Leads": "线索",
+    "Deposits": "入金",
+    "CPL": "每线索成本",
+    "CPD": "每入金成本",
+    "Lead → Dep": "线索→入金",
+    "Lead → Dep %": "线索→入金 %",
+    "L→D %": "线索→入金 %",
+    "Tax incl.": "含税",
+    "yesterday": "昨日",
+    "vs": "对比",
+    "On pace": "进度正常",
+    "over": "超出",
+    "under": "低于",
+    "Not set": "未设置",
+    "Set a target in admin settings": "在管理员设置中设定目标",
+
+    // Filters
+    "Quick view": "快捷视图",
+    "This week": "本周",
+    "This month": "本月",
+    "Custom": "自定义",
+    "Range:": "范围：",
+    "Clear range": "清除范围",
+    "Filter": "筛选",
+    "All accounts": "所有账户",
+    "All countries": "所有国家",
+    "Reset all": "重置全部",
+    "Click to filter": "点击筛选",
+    "Click any row to filter": "点击任意行进行筛选",
+
+    // Performance summary
+    "Performance Summary": "业绩汇总",
+    "All periods at a glance": "一览所有时段",
+    "All accounts & countries": "所有账户和国家",
+    "Filtered": "已筛选",
+    "Filtered to": "筛选至",
+    "Period": "时段",
+    "Spend": "支出",
+    "Last 7 days": "近7天",
+    "Last 30 days": "近30天",
+    "Month to date": "本月至今",
+
+    // Geo & breakdown
+    "Performance by Country": "各国家业绩",
+    "Spend, leads, and deposits per market": "各市场支出、线索及入金",
+    "By Account": "按账户",
+    "Account-level split": "账户层级分布",
+    "Country": "国家",
+    "Share": "占比",
+    "Amount (USD)": "金额（美元）",
+    "Amount": "金额",
+
+    // Charts
+    "Trend": "趋势",
+    "Daily breakdown": "每日明细",
+
+    // Funnel
+    "Conversion Funnel": "转化漏斗",
+    "Impressions → Clicks → Leads → Deposits": "展示量 → 点击 → 线索 → 入金",
+    "of impressions": "占展示量",
+    "of clicks": "占点击",
+    "of leads": "占线索",
+
+    // Admin & forms
+    "Admin Input": "管理员输入",
+    "Add daily entries · deposits · settings": "添加每日条目 · 入金 · 设置",
+    "Add Campaign Entry": "添加广告条目",
+    "Edit Campaign Entry": "编辑广告条目",
+    "Per campaign · Spend required, others optional": "每个广告 · 必填支出，其他可选",
+    "Bulk import": "批量导入",
+    "Date": "日期",
+    "Account": "账户",
+    "Geo / Country": "国家",
+    "Spend (USD)": "支出（美元）",
+    "Notes": "备注",
+    "Add Entry": "添加条目",
+    "Save Changes": "保存更改",
+    "Cancel": "取消",
+    "Daily Deposits by Country": "各国每日入金",
+    "Total deposits per country for the selected date": "所选日期各国总入金",
+    "Save Deposits": "保存入金",
+    "Daily Target (USD)": "每日目标（美元）",
+    "Save": "保存",
+    "Tax Rate (applied to all spend)": "税率（应用于所有支出）",
+
+    // Quick add
+    "Quick add deposit": "快速添加入金",
+    "Select country…": "选择国家…",
+    "Count": "数量",
+    "USD amount (opt)": "金额美元（可选）",
+    "Add": "添加",
+    "Saved": "已保存",
+    "Pick country & count > 0": "请选国家及大于0的数量",
+    "Existing record:": "已有记录：",
+    "deposits": "入金",
+    "saving will overwrite": "保存将覆盖",
+
+    // Tables
+    "Daily Deposits": "每日入金",
+    "entries": "条目",
+    "No deposit data yet — use the quick-add above to add daily counts.": "暂无入金数据 — 使用上方快速添加。",
+    "No deposit data yet.": "暂无入金数据。",
+    "No deposits match the current filter.": "当前筛选无匹配入金。",
+    "Period total": "时段合计",
+    "Campaign Entries": "广告条目",
+    "ACCOUNT": "账户",
+    "GEO": "国家",
+    "SPEND": "支出",
+    "IMPR.": "展示",
+    "CLICKS": "点击",
+    "LEADS": "线索",
+    "CTR": "点击率",
+    "Click to edit": "点击编辑",
+    "Edit": "编辑",
+    "Delete": "删除",
+    "Save (Enter)": "保存（回车）",
+    "Cancel (Esc)": "取消（Esc）",
+    "add…": "添加…",
+
+    // Footer
+    "Admin mode · Shared with all viewers": "管理员模式 · 与所有查看者共享",
+    "Read-only view · Unlock admin to input data": "只读视图 · 解锁管理员以输入数据",
+  },
+};
+
+const useT = (lang) => {
+  return (key) => {
+    const dict = TRANSLATIONS[lang];
+    if (!dict) return key;
+    return dict[key] || key;
+  };
+};
+
+
 const formatUSD = (n) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 const formatUSDCompact = (n) => {
@@ -201,10 +374,17 @@ const formatShortDate = (iso) => {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
-const timeAgo = (iso) => {
-  if (!iso) return "never";
+const timeAgo = (iso, lang = "en") => {
+  if (!iso) return lang === "zh" ? "从未" : "never";
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
+  if (lang === "zh") {
+    if (mins < 1) return "刚刚";
+    if (mins < 60) return `${mins} 分钟前`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs} 小时前`;
+    return `${Math.floor(hrs / 24)} 天前`;
+  }
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
@@ -339,6 +519,18 @@ export default function MetaSpendDashboard() {
   // Hero strip period selector — lets bosses flip the top stat between
   // Today / Yesterday / 7D / 30D / MTD / All-time without affecting filters below.
   const [heroPeriod, setHeroPeriod] = useState("today");
+  // Language state — persists across reloads via localStorage.
+  // Currently supports "en" (default) and "zh" (Simplified Chinese).
+  const [lang, setLang] = useState(() => {
+    if (typeof window === "undefined") return "en";
+    return localStorage.getItem("dashboard_lang") || "en";
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dashboard_lang", lang);
+    }
+  }, [lang]);
+  const t = useT(lang);
 
   // Entry form
   const [date, setDate] = useState(todayISO());
@@ -584,8 +776,8 @@ export default function MetaSpendDashboard() {
     await persistDeposits(next);
   };
 
-  // Update an existing deposit's count and/or amount inline.
-  // newValues is an object like { count?: number, amount?: number }
+  // Update an existing deposit's count, amount, and/or source inline.
+  // newValues is an object like { count?: number, amount?: number, source?: string }
   const handleEditDeposit = async (id, newValues) => {
     const next = deposits.map((d) => {
       if (d.id !== id) return d;
@@ -597,6 +789,9 @@ export default function MetaSpendDashboard() {
       if (newValues.amount !== undefined) {
         const a = parseFloat(newValues.amount);
         if (!isNaN(a) && a >= 0) updated.amount = a;
+      }
+      if (newValues.source !== undefined) {
+        updated.source = String(newValues.source).trim();
       }
       return updated;
     });
@@ -683,6 +878,7 @@ export default function MetaSpendDashboard() {
         id: Date.now().toString() + Math.random().toString(36).slice(2, 9),
         date: d.date, geo: d.geo || "Other", count: d.count || 0,
         amount: d.amount || 0,
+        source: d.source || "",
         createdAt: new Date().toISOString(),
       }));
       let next = [...deposits];
@@ -1059,45 +1255,62 @@ export default function MetaSpendDashboard() {
           <div>
             <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-cyan-400/80 mb-2">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span>
-              Live · Meta Ads Performance
+              {t("LIVE · META ADS PERFORMANCE")}
             </div>
-            <h1 className="font-display text-3xl md:text-5xl font-extrabold text-white">Daily Performance Dashboard</h1>
+            <h1 className="font-display text-3xl md:text-5xl font-extrabold text-white">{t("Daily Performance Dashboard")}</h1>
             <p className="text-slate-400 mt-2 text-sm flex items-center gap-3 flex-wrap">
-              <span>{new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
+              <span>{new Date().toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
               <span className="text-slate-600">·</span>
-              <span className="text-slate-500">Updated {timeAgo(config.lastUpdated)}</span>
+              <span className="text-slate-500">{t("Updated")} {timeAgo(config.lastUpdated, lang)}</span>
               {(config.taxRate || 0) > 0 && (
                 <>
                   <span className="text-slate-600">·</span>
-                  <span className="text-amber-400/80" title="All spend, CPL, CPC, CPD include this tax">
-                    Spend incl. {((config.taxRate || 0) * 100).toFixed(0)}% tax
+                  <span className="text-amber-400/80">
+                    {t("Spend incl.")} {((config.taxRate || 0) * 100).toFixed(0)}% {t("tax")}
                   </span>
                 </>
               )}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={loadAll} className="flex items-center gap-2 px-3 py-2.5 rounded-lg glass glass-hover text-sm text-slate-300" title="Refresh"><RefreshCw className="w-4 h-4" /></button>
+            {/* Language switcher — pill toggle EN | 中文 */}
+            <div className="flex items-center gap-0.5 p-0.5 rounded-lg glass">
+              <button
+                onClick={() => setLang("en")}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  lang === "en" ? "bg-cyan-500/25 text-cyan-200" : "text-slate-500 hover:text-slate-200"
+                }`}
+                title="English"
+              >EN</button>
+              <button
+                onClick={() => setLang("zh")}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  lang === "zh" ? "bg-cyan-500/25 text-cyan-200" : "text-slate-500 hover:text-slate-200"
+                }`}
+                title="简体中文"
+              >中文</button>
+            </div>
+            <button onClick={loadAll} className="flex items-center gap-2 px-3 py-2.5 rounded-lg glass glass-hover text-sm text-slate-300" title={t("Refresh")}><RefreshCw className="w-4 h-4" /></button>
             <button onClick={exportCSV} disabled={entries.length === 0 && deposits.length === 0} className="flex items-center gap-2 px-4 py-2.5 rounded-lg glass glass-hover text-sm text-slate-200 disabled:opacity-40">
-              <Download className="w-4 h-4" /><span className="hidden md:inline">Export</span>
+              <Download className="w-4 h-4" /><span className="hidden md:inline">{t("Export")}</span>
             </button>
             {isAdmin && (
               <button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-violet-500/20 border border-violet-500/40 text-violet-300 text-sm font-medium hover:bg-violet-500/30">
-                <Upload className="w-4 h-4" /><span className="hidden md:inline">Import</span>
+                <Upload className="w-4 h-4" /><span className="hidden md:inline">{t("Import")}</span>
               </button>
             )}
             {isAdmin && (
               <button onClick={() => setShowDeleteModal(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-pink-500/15 border border-pink-500/30 text-pink-300 text-sm font-medium hover:bg-pink-500/25">
-                <Trash2 className="w-4 h-4" /><span className="hidden md:inline">Bulk delete</span>
+                <Trash2 className="w-4 h-4" /><span className="hidden md:inline">{t("Bulk delete")}</span>
               </button>
             )}
             {isAdmin ? (
               <button onClick={exitAdmin} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-sm font-medium hover:bg-cyan-500/30">
-                <LogOut className="w-4 h-4" /><span className="hidden md:inline">Exit Admin</span>
+                <LogOut className="w-4 h-4" /><span className="hidden md:inline">{lang === "zh" ? "退出管理员" : "Exit Admin"}</span>
               </button>
             ) : (
               <button onClick={openAdminModal} className="flex items-center gap-2 px-4 py-2.5 rounded-lg glass glass-hover text-sm text-slate-300">
-                <Lock className="w-4 h-4" /><span className="hidden md:inline">Admin</span>
+                <Lock className="w-4 h-4" /><span className="hidden md:inline">{t("Admin")}</span>
               </button>
             )}
           </div>
@@ -1108,12 +1321,12 @@ export default function MetaSpendDashboard() {
         {(() => {
           // Map heroPeriod key to the right summaryStats bucket + display labels
           const periodMap = {
-            today: { label: "Today's Spend", data: summaryStats.today, compareLabel: `vs ${formatUSD(summaryStats.yesterday.spend)} yesterday` },
-            yesterday: { label: "Yesterday's Spend", data: summaryStats.yesterday, compareLabel: null },
-            last7: { label: "Last 7 Days", data: summaryStats.last7, compareLabel: null },
-            last30: { label: "Last 30 Days", data: summaryStats.last30, compareLabel: null },
-            mtd: { label: "Month to Date", data: summaryStats.mtd, compareLabel: null },
-            allTime: { label: "All-time Spend", data: summaryStats.allTime, compareLabel: null },
+            today: { label: t("Today's Spend"), data: summaryStats.today, compareLabel: `vs ${formatUSD(summaryStats.yesterday.spend)} yesterday` },
+            yesterday: { label: t("Yesterday's Spend"), data: summaryStats.yesterday, compareLabel: null },
+            last7: { label: t("Last 7 Days"), data: summaryStats.last7, compareLabel: null },
+            last30: { label: t("Last 30 Days"), data: summaryStats.last30, compareLabel: null },
+            mtd: { label: t("Month to Date"), data: summaryStats.mtd, compareLabel: null },
+            allTime: { label: t("All-time Spend"), data: summaryStats.allTime, compareLabel: null },
           };
           const active = periodMap[heroPeriod] || periodMap.today;
           const showDayCompare = heroPeriod === "today";
@@ -1127,14 +1340,14 @@ export default function MetaSpendDashboard() {
 
               {/* Period switcher tabs */}
               <div className="relative px-5 md:px-6 pt-4 pb-0 flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mr-2">Showing:</span>
+                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mr-2">{t("Showing:")}</span>
                 {[
-                  { key: "today", label: "Today" },
-                  { key: "yesterday", label: "Yesterday" },
-                  { key: "last7", label: "Last 7d" },
-                  { key: "last30", label: "Last 30d" },
-                  { key: "mtd", label: "MTD" },
-                  { key: "allTime", label: "All-time" },
+                  { key: "today", label: t("Today") },
+                  { key: "yesterday", label: t("Yesterday") },
+                  { key: "last7", label: t("Last 7d") },
+                  { key: "last30", label: t("Last 30d") },
+                  { key: "mtd", label: t("MTD") },
+                  { key: "allTime", label: t("All-time") },
                 ].map((p) => (
                   <button
                     key={p.key}
@@ -1180,10 +1393,16 @@ export default function MetaSpendDashboard() {
 
                 {/* Secondary metrics */}
                 <div className="lg:col-span-5 grid grid-cols-2 lg:grid-cols-4 border-t lg:border-t-0 border-slate-800/60">
-                  <HeroStat label="Leads" value={formatNumCompact(active.data.leads)} icon={<Users className="w-3 h-3" />} accent="emerald" />
-                  <HeroStat label="Deposits" value={formatNumCompact(active.data.deposits)} icon={<Banknote className="w-3 h-3" />} accent="amber" />
-                  <HeroStat label="CPL" value={active.data.cpl != null ? formatUSDCompact(active.data.cpl) : "—"} icon={<Target className="w-3 h-3" />} accent="violet" />
-                  <HeroStat label="CPD" value={active.data.cpd != null ? formatUSDCompact(active.data.cpd) : "—"} icon={<Wallet className="w-3 h-3" />} accent="cyan" />
+                  <HeroStat label={t("Leads")} value={formatNumCompact(active.data.leads)} icon={<Users className="w-3 h-3" />} accent="emerald" />
+                  <HeroStat
+                    label={t("Deposits")}
+                    value={formatNumCompact(active.data.deposits)}
+                    sublabel={active.data.depositAmount > 0 ? formatUSDCompact(active.data.depositAmount) : null}
+                    icon={<Banknote className="w-3 h-3" />}
+                    accent="amber"
+                  />
+                  <HeroStat label={t("CPL")} value={active.data.cpl != null ? formatUSDCompact(active.data.cpl) : "—"} icon={<Target className="w-3 h-3" />} accent="violet" />
+                  <HeroStat label={t("CPD")} value={active.data.cpd != null ? formatUSDCompact(active.data.cpd) : "—"} icon={<Wallet className="w-3 h-3" />} accent="cyan" />
                 </div>
 
                 {/* Right column: Daily target (today) OR period-specific extra info */}
@@ -1191,7 +1410,7 @@ export default function MetaSpendDashboard() {
                   {showTargetPacing ? (
                     <>
                       <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-2 flex items-center gap-1.5">
-                        <Target className="w-3 h-3" /> Daily Target
+                        <Target className="w-3 h-3" /> {t("Daily Target")}
                       </div>
                       <div className="flex items-baseline gap-2 mb-2">
                         <span className="font-mono-num text-xl font-bold text-white">{formatUSDCompact(active.data.spend)}</span>
@@ -1215,26 +1434,26 @@ export default function MetaSpendDashboard() {
                   ) : (
                     <>
                       <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-2 flex items-center gap-1.5">
-                        <Activity className="w-3 h-3" /> Period Detail
+                        <Activity className="w-3 h-3" /> {t("Period Detail")}
                       </div>
                       <div className="space-y-1.5 text-xs">
                         <div className="flex justify-between">
-                          <span className="text-slate-500">Impressions</span>
+                          <span className="text-slate-500">{t("Impressions")}</span>
                           <span className="font-mono-num text-slate-200">{active.data.impressions ? formatNumCompact(active.data.impressions) : "—"}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-slate-500">Clicks</span>
+                          <span className="text-slate-500">{t("Clicks")}</span>
                           <span className="font-mono-num text-slate-200">{active.data.clicks ? formatNumCompact(active.data.clicks) : "—"}</span>
                         </div>
                         {active.data.l2d != null && (
                           <div className="flex justify-between">
-                            <span className="text-slate-500">Lead → Dep</span>
+                            <span className="text-slate-500">{t("Lead → Dep")}</span>
                             <span className="font-mono-num text-slate-200">{formatPct(active.data.l2d)}</span>
                           </div>
                         )}
                         {active.data.tax > 0 && (
                           <div className="flex justify-between border-t border-slate-800/60 pt-1.5 mt-1.5">
-                            <span className="text-slate-500">Tax incl.</span>
+                            <span className="text-slate-500">{t("Tax incl.")}</span>
                             <span className="font-mono-num text-amber-300">{formatUSDCompact(active.data.tax)}</span>
                           </div>
                         )}
@@ -1251,7 +1470,7 @@ export default function MetaSpendDashboard() {
         <div className="glass rounded-2xl overflow-hidden mb-8">
           <div className="px-5 md:px-6 py-4 border-b border-slate-800/60 flex items-center justify-between flex-wrap gap-2">
             <div>
-              <h2 className="font-display text-lg font-bold text-white">Performance Summary</h2>
+              <h2 className="font-display text-lg font-bold text-white">{t("Performance Summary")}</h2>
               <p className="text-xs text-slate-500 mt-0.5">
                 All periods at a glance
                 {accountFilter !== "all" || geoFilter !== "all"
@@ -1270,6 +1489,7 @@ export default function MetaSpendDashboard() {
                   <th className="text-right px-4 py-3 font-medium">Clicks</th>
                   <th className="text-right px-4 py-3 font-medium">Leads</th>
                   <th className="text-right px-4 py-3 font-medium">Deposits</th>
+                  <th className="text-right px-4 py-3 font-medium">Dep $</th>
                   <th className="text-right px-4 py-3 font-medium">CPL</th>
                   <th className="text-right px-4 py-3 font-medium">CPD</th>
                   <th className="text-right px-4 py-3 font-medium">L→D %</th>
@@ -1277,12 +1497,12 @@ export default function MetaSpendDashboard() {
               </thead>
               <tbody>
                 {[
-                  { label: "Today", data: summaryStats.today },
-                  { label: "Yesterday", data: summaryStats.yesterday },
-                  { label: "Last 7 days", data: summaryStats.last7 },
-                  { label: "Last 30 days", data: summaryStats.last30 },
-                  { label: "Month to date", data: summaryStats.mtd },
-                  { label: "All-time", data: summaryStats.allTime, emphasize: true },
+                  { label: t("Today"), data: summaryStats.today },
+                  { label: t("Yesterday"), data: summaryStats.yesterday },
+                  { label: t("Last 7 days"), data: summaryStats.last7 },
+                  { label: t("Last 30 days"), data: summaryStats.last30 },
+                  { label: t("Month to date"), data: summaryStats.mtd },
+                  { label: t("All-time"), data: summaryStats.allTime, emphasize: true },
                 ].map((row) => (
                   <tr
                     key={row.label}
@@ -1309,6 +1529,9 @@ export default function MetaSpendDashboard() {
                     </td>
                     <td className="px-4 py-3 text-right font-mono-num text-amber-300 font-semibold">
                       {row.data.deposits ? formatNumCompact(row.data.deposits) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono-num text-emerald-300 font-semibold">
+                      {row.data.depositAmount > 0 ? formatUSDCompact(row.data.depositAmount) : "—"}
                     </td>
                     <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
                       {row.data.cpl != null ? formatUSDCompact(row.data.cpl) : "—"}
@@ -1480,15 +1703,15 @@ export default function MetaSpendDashboard() {
             {/* Row 1: View presets — one-click answers to common questions */}
             <div className="flex flex-wrap items-center gap-1.5">
               <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-slate-500 mr-1 shrink-0">
-                <Sparkles className="w-3 h-3" /> Quick view
+                <Sparkles className="w-3 h-3" /> {t("Quick view")}
               </div>
               {[
-                { label: "Today", onClick: () => { setRangeFilter("1"); setCustomStart(""); setCustomEnd(""); setAccountFilter("all"); setGeoFilter("all"); }, active: rangeFilter === "1" && !customStart && accountFilter === "all" && geoFilter === "all" },
-                { label: "Yesterday", onClick: () => { const y = daysAgoISO(1); setCustomStart(y); setCustomEnd(y); setAccountFilter("all"); setGeoFilter("all"); }, active: customStart === daysAgoISO(1) && customEnd === daysAgoISO(1) },
-                { label: "This week", onClick: () => { setRangeFilter("7"); setCustomStart(""); setCustomEnd(""); }, active: rangeFilter === "7" && !customStart },
-                { label: "This month", onClick: () => { const monthStart = todayISO().slice(0, 7) + "-01"; setCustomStart(monthStart); setCustomEnd(todayISO()); }, active: customStart === (todayISO().slice(0, 7) + "-01") && customEnd === todayISO() },
-                { label: "Last 30d", onClick: () => { setRangeFilter("30"); setCustomStart(""); setCustomEnd(""); }, active: rangeFilter === "30" && !customStart },
-                { label: "All time", onClick: () => { setRangeFilter("all"); setCustomStart(""); setCustomEnd(""); }, active: rangeFilter === "all" && !customStart },
+                { label: t("Today"), onClick: () => { setRangeFilter("1"); setCustomStart(""); setCustomEnd(""); setAccountFilter("all"); setGeoFilter("all"); }, active: rangeFilter === "1" && !customStart && accountFilter === "all" && geoFilter === "all" },
+                { label: t("Yesterday"), onClick: () => { const y = daysAgoISO(1); setCustomStart(y); setCustomEnd(y); setAccountFilter("all"); setGeoFilter("all"); }, active: customStart === daysAgoISO(1) && customEnd === daysAgoISO(1) },
+                { label: t("This week"), onClick: () => { setRangeFilter("7"); setCustomStart(""); setCustomEnd(""); }, active: rangeFilter === "7" && !customStart },
+                { label: t("This month"), onClick: () => { const monthStart = todayISO().slice(0, 7) + "-01"; setCustomStart(monthStart); setCustomEnd(todayISO()); }, active: customStart === (todayISO().slice(0, 7) + "-01") && customEnd === todayISO() },
+                { label: t("Last 30d"), onClick: () => { setRangeFilter("30"); setCustomStart(""); setCustomEnd(""); }, active: rangeFilter === "30" && !customStart },
+                { label: t("All time"), onClick: () => { setRangeFilter("all"); setCustomStart(""); setCustomEnd(""); }, active: rangeFilter === "all" && !customStart },
               ].map((preset) => (
                 <button
                   key={preset.label}
@@ -1510,7 +1733,7 @@ export default function MetaSpendDashboard() {
                     : "bg-slate-900/40 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
                 }`}
               >
-                <Calendar className="w-3 h-3" /> Custom
+                <Calendar className="w-3 h-3" /> {t("Custom")}
               </button>
             </div>
 
@@ -1535,7 +1758,7 @@ export default function MetaSpendDashboard() {
                   <button
                     onClick={() => { setCustomStart(""); setCustomEnd(""); }}
                     className="text-[11px] text-slate-500 hover:text-slate-200 px-2"
-                  >Clear range</button>
+                  >{t("Clear range")}</button>
                 )}
               </div>
             )}
@@ -1543,17 +1766,17 @@ export default function MetaSpendDashboard() {
             {/* Row 2: Account + Country dropdowns + active filter chips */}
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-slate-500 mr-1 shrink-0">
-                <Filter className="w-3 h-3" /> Filter
+                <Filter className="w-3 h-3" /> {t("Filter")}
               </div>
               {allAccounts.length > 0 && (
                 <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} className="px-3 py-1.5 rounded-md text-xs bg-slate-900/60 border border-slate-800/60 text-slate-200 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 outline-none transition-colors">
-                  <option value="all">All accounts</option>
+                  <option value="all">{t("All accounts")}</option>
                   {allAccounts.map((a) => <option key={a} value={a}>{a}</option>)}
                 </select>
               )}
               {allGeos.length > 0 && (
                 <select value={geoFilter} onChange={(e) => setGeoFilter(e.target.value)} className="px-3 py-1.5 rounded-md text-xs bg-slate-900/60 border border-slate-800/60 text-slate-200 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 outline-none transition-colors">
-                  <option value="all">All countries</option>
+                  <option value="all">{t("All countries")}</option>
                   {allGeos.map((g) => <option key={g} value={g}>{flagFor(g)} {g}</option>)}
                 </select>
               )}
@@ -1581,7 +1804,7 @@ export default function MetaSpendDashboard() {
                   className="ml-auto px-2.5 py-1.5 rounded-md text-[11px] text-slate-500 hover:text-pink-300 hover:bg-pink-500/10 transition-colors flex items-center gap-1"
                   title="Reset everything"
                 >
-                  <X className="w-3 h-3" /> Reset all
+                  <X className="w-3 h-3" /> {t("Reset all")}
                 </button>
               )}
             </div>
@@ -1653,7 +1876,7 @@ export default function MetaSpendDashboard() {
         <div className="glass rounded-2xl p-5 md:p-6 mb-6">
           <div className="flex items-center gap-2 mb-1">
             <Globe className="w-4 h-4 text-emerald-400" />
-            <h2 className="font-display text-lg font-bold text-white">Performance by Country</h2>
+            <h2 className="font-display text-lg font-bold text-white">{t("Performance by Country")}</h2>
           </div>
           <p className="text-xs text-slate-500 mb-4 flex items-center gap-1.5">
             Spend, leads, and deposits per market
@@ -1675,7 +1898,7 @@ export default function MetaSpendDashboard() {
 
         {/* By Account */}
         <div className="glass rounded-2xl p-5 md:p-6 mb-6">
-          <h2 className="font-display text-lg font-bold text-white mb-1">By Account</h2>
+          <h2 className="font-display text-lg font-bold text-white mb-1">{t("By Account")}</h2>
           <p className="text-xs text-slate-500 mb-4 flex items-center gap-1.5">
             Account-level split
             <span className="hidden sm:inline text-slate-600">·</span>
@@ -1755,7 +1978,7 @@ export default function MetaSpendDashboard() {
               </Field>
               <Field label="Impressions"><input type="number" min="0" value={impressions} onChange={(e) => setImpressions(e.target.value)} placeholder="0" className="input-base font-mono-num" /></Field>
               <Field label="Clicks"><input type="number" min="0" value={clicks} onChange={(e) => setClicks(e.target.value)} placeholder="0" className="input-base font-mono-num" /></Field>
-              <Field label="Leads"><input type="number" min="0" value={leads} onChange={(e) => setLeads(e.target.value)} placeholder="0" className="input-base font-mono-num" /></Field>
+              <Field label={t("Leads")}><input type="number" min="0" value={leads} onChange={(e) => setLeads(e.target.value)} placeholder="0" className="input-base font-mono-num" /></Field>
               <div className="md:col-span-2 lg:col-span-4">
                 <Field label="Notes (optional)"><input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Campaign name or context" className="input-base" /></Field>
               </div>
@@ -1765,7 +1988,7 @@ export default function MetaSpendDashboard() {
               <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                 <PreviewMetric label="CTR" value={impressions && parseFloat(impressions) > 0 ? formatPct((parseFloat(clicks || 0) / parseFloat(impressions)) * 100) : "—"} />
                 <PreviewMetric label="CPC" value={clicks && parseFloat(clicks) > 0 ? formatUSD(parseFloat(amount) / parseFloat(clicks)) : "—"} />
-                <PreviewMetric label="CPL" value={leads && parseFloat(leads) > 0 ? formatUSD(parseFloat(amount) / parseFloat(leads)) : "—"} />
+                <PreviewMetric label={t("CPL")} value={leads && parseFloat(leads) > 0 ? formatUSD(parseFloat(amount) / parseFloat(leads)) : "—"} />
                 <PreviewMetric label="CPM" value={impressions && parseFloat(impressions) > 0 ? formatUSD((parseFloat(amount) / parseFloat(impressions)) * 1000) : "—"} />
               </div>
             )}
@@ -2037,7 +2260,7 @@ export default function MetaSpendDashboard() {
           <div className="px-5 md:px-6 py-4 border-b border-slate-800/60 flex items-center justify-between flex-wrap gap-3">
             <div>
               <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
-                <Banknote className="w-4 h-4 text-amber-400" /> Daily Deposits
+                <Banknote className="w-4 h-4 text-amber-400" /> {t("Daily Deposits")}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">{filteredDeposits.length} entries</p>
             </div>
@@ -2151,6 +2374,7 @@ export default function MetaSpendDashboard() {
                   <tr className="text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800/60">
                     <th className="text-left px-4 py-3 font-medium">Date</th>
                     <th className="text-left px-4 py-3 font-medium">Country</th>
+                    <th className="text-left px-4 py-3 font-medium">Source</th>
                     <th className="text-right px-4 py-3 font-medium">Deposits</th>
                     <th className="text-right px-4 py-3 font-medium">Amount (USD)</th>
                     {isAdmin && <th className="px-4 py-3"></th>}
@@ -2184,6 +2408,9 @@ export default function MetaSpendDashboard() {
                         <td className="px-4 py-3 text-slate-200 font-mono-num text-xs whitespace-nowrap">{formatDate(d.date)}</td>
                         <td className="px-4 py-3 text-slate-200 text-xs">
                           <span className="mr-1.5">{flagFor(d.geo)}</span>{d.geo}
+                        </td>
+                        <td className="px-4 py-3 text-slate-400 text-xs font-mono max-w-xs truncate" title={d.source || ""}>
+                          {d.source || <span className="text-slate-700">—</span>}
                         </td>
                         <td className="px-4 py-3 text-right">
                           {isEditing ? (
@@ -2286,7 +2513,7 @@ export default function MetaSpendDashboard() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-900/40">
-                    <td colSpan={2} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400">Period total</td>
+                    <td colSpan={3} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400">Period total</td>
                     <td className="px-4 py-3 text-right font-mono-num text-amber-300 font-bold text-xs">{formatNum(stats.total.deposits)}</td>
                     <td className="px-4 py-3 text-right font-mono-num text-emerald-300 font-bold text-xs">{stats.total.depositAmount ? formatUSD(stats.total.depositAmount) : "—"}</td>
                     {isAdmin && <td></td>}
@@ -2364,7 +2591,7 @@ export default function MetaSpendDashboard() {
         </div>
 
         <p className="text-center text-xs text-slate-600 mt-8">
-          {isAdmin ? "Admin mode · Shared with all viewers" : "Read-only view · Unlock admin to input data"}
+          {isAdmin ? t("Admin mode · Shared with all viewers") : t("Read-only view · Unlock admin to input data")}
         </p>
       </div>
 
@@ -2657,14 +2884,18 @@ function ImportModal({ onClose, onImport }) {
         if (!dateRaw || !geo) return;
 
         const key = `${dateRaw}|${geo}`;
-        const existing = buckets.get(key) || { count: 0, amount: 0 };
+        const existing = buckets.get(key) || { count: 0, amount: 0, sources: new Set() };
         existing.count += 1;
         existing.amount += amount;
+        if (sourceText) existing.sources.add(sourceText);
         buckets.set(key, existing);
       });
-      buckets.forEach(({ count, amount }, key) => {
+      buckets.forEach(({ count, amount, sources }, key) => {
         const [date, geo] = key.split("|");
-        out.push({ date, geo, count, amount: parseFloat(amount.toFixed(2)) });
+        // Join unique sources with comma — typically just 1-2 per bucket
+        // (e.g. "TH_LP_DC2_2026" or "ID_LP_DC1_2026, ID_LP_DC3_2026")
+        const source = sources && sources.size > 0 ? Array.from(sources).join(", ") : "";
+        out.push({ date, geo, count, amount: parseFloat(amount.toFixed(2)), source });
       });
       return out;
     }
@@ -3237,7 +3468,7 @@ function FilterChip({ label, onClear, color = "cyan" }) {
   );
 }
 
-function HeroStat({ label, value, icon, accent }) {
+function HeroStat({ label, value, sublabel, icon, accent }) {
   const accents = {
     emerald: { glow: "rgba(52,211,153,0.18)", text: "text-emerald-400" },
     amber: { glow: "rgba(251,191,36,0.18)", text: "text-amber-400" },
@@ -3258,6 +3489,11 @@ function HeroStat({ label, value, icon, accent }) {
       <div className="relative font-mono-num text-2xl md:text-3xl font-bold text-white leading-none">
         {value}
       </div>
+      {sublabel && (
+        <div className="relative text-[10px] text-slate-400 font-mono-num mt-1">
+          {sublabel}
+        </div>
+      )}
     </div>
   );
 }
