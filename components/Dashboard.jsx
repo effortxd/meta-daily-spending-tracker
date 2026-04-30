@@ -361,6 +361,95 @@ const TRANSLATIONS = {
     // Footer
     "Admin mode · Shared with all viewers": "管理员模式 · 与所有查看者共享",
     "Read-only view · Unlock admin to input data": "只读视图 · 解锁管理员以输入数据",
+
+    // Extended translations — appended to fill gaps reported by users
+    "Exit Admin": "退出管理员",
+    "All campaigns": "所有广告系列",
+    "Dep $": "入金金额",
+    "avg": "平均",
+    "Incl.": "含",
+    "L→D": "线索→入金",
+
+    // Budget Status
+    "Budget Status": "预算状态",
+    "Total loaded vs spent across all time": "累计充值与支出对比",
+    "Loaded": "已充值",
+    "Spent": "已支出",
+    "Remaining": "剩余",
+    "used": "已使用",
+    "Top-up soon — under 20% left": "即将充值 — 余额低于20%",
+    "USED": "使用率",
+
+    // Charts
+    "Daily breakdown by spend, leads, and deposits": "按支出、线索和入金的每日明细",
+    "Daily Trend": "每日趋势",
+    "All-time totals": "累计总数",
+    "Last": "近",
+    "days": "天",
+    "Last 60 days": "近60天",
+    "Account Top-up": "账户充值",
+    "Record budget added to ad accounts": "记录添加到广告账户的预算",
+    "Save deposits for": "保存入金于",
+    "Empty or zero values won't save · existing entries for this date are replaced when you save": "空白或零值不会保存 · 保存时此日期的现有条目将被替换",
+    "+ Add a country…": "+ 添加国家…",
+    "Set Admin Passcode": "设置管理员密码",
+    "Admin Access": "管理员访问",
+    "Bulk Import": "批量导入",
+    "Bulk Delete": "批量删除",
+    "Preview & map columns": "预览并映射列",
+    "Extracted from screenshot": "从截图提取",
+    "Set 0 to disable": "设为0以禁用",
+    "top-up records": "充值记录",
+    "No top-ups recorded yet. Add one above when you fund an ad account.": "暂无充值记录。当您为广告账户充值时,在上方添加。",
+    "No top-up data yet.": "暂无充值数据。",
+    "Filter Active": "筛选已激活",
+    "Custom range": "自定义日期",
+    "to": "至",
+    "Cost / Lead": "每线索成本",
+    "Cost / Deposit": "每入金成本",
+    "Reach": "覆盖",
+    "CPM": "千次展示成本",
+    "CPC": "每次点击成本",
+
+    // Forms — extra
+    "Campaign": "广告系列",
+    "Campaign name": "广告系列名称",
+    "Custom account": "自定义账户",
+    "Custom geo": "自定义国家",
+    "Geo": "国家",
+    "Spend (USD) *": "支出(美元) *",
+    "Notes (optional)": "备注(可选)",
+    "Internal notes or context": "内部备注或上下文",
+    "Add entry": "添加条目",
+    "Save changes": "保存更改",
+
+    // Topups
+    "Top-up": "充值",
+    "Top-ups History": "充值历史",
+    "Add Top-up": "添加充值",
+    "Account credit loaded by date": "按日期记录的账户充值",
+
+    // Quick add — extra
+    "Quick Add Deposit": "快速添加入金",
+    "QUICK ADD DEPOSIT": "快速添加入金",
+    "Source — e.g. TH_LP_DC2_2026 (opt)": "来源 — 例如 TH_LP_DC2_2026 (可选)",
+    "CRM ID — e.g. 106252 (opt)": "CRM ID — 例如 106252 (可选)",
+
+    // Tables — extra
+    "filtered": "已筛选",
+    "entry": "条目",
+    "CAMPAIGN": "广告系列",
+    "DEPOSITS": "入金",
+    "AMOUNT (USD)": "金额(美元)",
+    "SOURCE": "来源",
+    "CRM ID": "CRM ID",
+    "DATE": "日期",
+    "Source": "来源",
+    "Bulk set account": "批量设置账户",
+    "Apply": "应用",
+    "Click to add source": "点击添加来源",
+    "Click to add CRM ID": "点击添加CRM ID",
+    "No entries match the current filter.": "当前筛选无匹配条目。",
   },
 };
 
@@ -1312,13 +1401,13 @@ export default function MetaSpendDashboard() {
   const budgetStatus = budgetPct == null ? null : budgetPct < 80 ? "under" : budgetPct <= 110 ? "on" : "over";
 
   const chartMetricMeta = {
-    spend: { label: "Spend", color: "#22d3ee", format: formatUSD },
-    deposits: { label: "Deposits", color: "#fbbf24", format: formatNum },
-    leads: { label: "Leads", color: "#34d399", format: formatNum },
-    cpd: { label: "CPD", color: "#fb923c", format: formatUSD },
-    cpl: { label: "CPL", color: "#f472b6", format: formatUSD },
-    clicks: { label: "Clicks", color: "#a78bfa", format: formatNum },
-    impressions: { label: "Impressions", color: "#60a5fa", format: formatNum },
+    spend: { label: t("Spend"), color: "#22d3ee", format: formatUSD },
+    deposits: { label: t("Deposits"), color: "#fbbf24", format: formatNum },
+    leads: { label: t("Leads"), color: "#34d399", format: formatNum },
+    cpd: { label: t("CPD"), color: "#fb923c", format: formatUSD },
+    cpl: { label: t("CPL"), color: "#f472b6", format: formatUSD },
+    clicks: { label: t("Clicks"), color: "#a78bfa", format: formatNum },
+    impressions: { label: t("Impressions"), color: "#60a5fa", format: formatNum },
   };
 
   return (
@@ -1577,14 +1666,14 @@ export default function MetaSpendDashboard() {
               <thead>
                 <tr className="text-[10px] uppercase tracking-[0.15em] text-slate-500 border-b border-slate-800/60">
                   <th className="text-left px-4 py-3 font-medium">Period</th>
-                  <th className="text-right px-4 py-3 font-medium">Spend</th>
+                  <th className="text-right px-4 py-3 font-medium">{t("Spend")}</th>
                   <th className="text-right px-4 py-3 font-medium">Impressions</th>
-                  <th className="text-right px-4 py-3 font-medium">Clicks</th>
-                  <th className="text-right px-4 py-3 font-medium">Leads</th>
-                  <th className="text-right px-4 py-3 font-medium">Deposits</th>
-                  <th className="text-right px-4 py-3 font-medium">Dep $</th>
-                  <th className="text-right px-4 py-3 font-medium">CPL</th>
-                  <th className="text-right px-4 py-3 font-medium">CPD</th>
+                  <th className="text-right px-4 py-3 font-medium">{t("Clicks")}</th>
+                  <th className="text-right px-4 py-3 font-medium">{t("Leads")}</th>
+                  <th className="text-right px-4 py-3 font-medium">{t("Deposits")}</th>
+                  <th className="text-right px-4 py-3 font-medium">{t("Dep $")}</th>
+                  <th className="text-right px-4 py-3 font-medium">{t("CPL")}</th>
+                  <th className="text-right px-4 py-3 font-medium">{t("CPD")}</th>
                   <th className="text-right px-4 py-3 font-medium">L→D %</th>
                 </tr>
               </thead>
@@ -1647,10 +1736,10 @@ export default function MetaSpendDashboard() {
           <div className="glass rounded-2xl p-5 md:p-6 mb-8">
             <div className="flex items-center gap-2 mb-1">
               <Wallet className="w-4 h-4 text-emerald-400" />
-              <h2 className="font-display text-lg font-bold text-white">Budget Status</h2>
+              <h2 className="font-display text-lg font-bold text-white">{t("Budget Status")}</h2>
             </div>
             <p className="text-xs text-slate-500 mb-5">
-              Total loaded vs spent across all time
+              {t("Total loaded vs spent across all time")}
               {(config.taxRate || 0) > 0 && <span className="text-amber-400/70"> · Spent incl. {((config.taxRate || 0) * 100).toFixed(0)}% tax</span>}
               {accountFilter !== "all" || geoFilter !== "all"
                 ? ` · Filtered${accountFilter !== "all" ? ` to ${accountFilter}` : ""}${geoFilter !== "all" ? ` · ${geoFilter}` : ""}`
@@ -1659,13 +1748,13 @@ export default function MetaSpendDashboard() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-5">
               <div className="border-l-2 border-emerald-500/40 pl-3 sm:border-l-0 sm:pl-0">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-1.5">Loaded</div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-1.5">{t("Loaded")}</div>
                 <div className="font-mono-num text-2xl md:text-3xl font-bold text-emerald-300">
                   {formatUSD(budgetStats.totalLoaded)}
                 </div>
               </div>
               <div className="border-l-2 border-cyan-500/40 pl-3 sm:border-l-0 sm:pl-0">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-1.5">Spent</div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-1.5">{t("Spent")}</div>
                 <div className="font-mono-num text-2xl md:text-3xl font-bold text-cyan-300">
                   {formatUSD(budgetStats.totalSpent)}
                 </div>
@@ -1675,7 +1764,7 @@ export default function MetaSpendDashboard() {
                 : budgetStats.utilizationPct > 80 ? "border-amber-500/40"
                 : "border-slate-500/40"
               }`}>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-1.5">Remaining</div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-1.5">{t("Remaining")}</div>
                 <div
                   className={`font-mono-num text-2xl md:text-3xl font-bold ${
                     budgetStats.remaining < 0
@@ -1712,7 +1801,7 @@ export default function MetaSpendDashboard() {
                     <span className="text-pink-400 font-medium">⚠ Spent more than loaded</span>
                   )}
                   {budgetStats.remaining >= 0 && budgetStats.utilizationPct > 80 && (
-                    <span className="text-amber-400 font-medium">⚠ Top-up soon — under 20% left</span>
+                    <span className="text-amber-400 font-medium">⚠ {t("Top-up soon — under 20% left")}</span>
                   )}
                 </div>
               </>
@@ -1720,16 +1809,16 @@ export default function MetaSpendDashboard() {
 
             {budgetStats.byAccount.length > 0 && (
               <div className="pt-4 border-t border-slate-800/60">
-                <div className="text-xs uppercase tracking-wider text-slate-500 mb-3">By Account</div>
+                <div className="text-xs uppercase tracking-wider text-slate-500 mb-3">{t("By Account")}</div>
                 <div className="overflow-x-auto scroll-x">
                   <table className="w-full text-sm min-w-[600px]">
                     <thead>
                       <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-800/60">
-                        <th className="text-left px-3 py-2 font-medium">Account</th>
-                        <th className="text-right px-3 py-2 font-medium">Loaded</th>
-                        <th className="text-right px-3 py-2 font-medium">Spent</th>
-                        <th className="text-right px-3 py-2 font-medium">Remaining</th>
-                        <th className="text-right px-3 py-2 font-medium">Used</th>
+                        <th className="text-left px-3 py-2 font-medium">{t("Account")}</th>
+                        <th className="text-right px-3 py-2 font-medium">{t("Loaded")}</th>
+                        <th className="text-right px-3 py-2 font-medium">{t("Spent")}</th>
+                        <th className="text-right px-3 py-2 font-medium">{t("Remaining")}</th>
+                        <th className="text-right px-3 py-2 font-medium">{t("USED")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1923,8 +2012,8 @@ export default function MetaSpendDashboard() {
         <div className="glass rounded-2xl p-4 md:p-6 mb-6">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <div>
-              <h2 className="font-display text-lg font-bold text-white">Daily {chartMetricMeta[chartMetric].label} Trend</h2>
-              <p className="text-xs text-slate-500 mt-0.5">{rangeFilter === "all" ? "Last 60 days" : `Last ${rangeFilter} days`}</p>
+              <h2 className="font-display text-lg font-bold text-white">{lang === "zh" ? `每日${chartMetricMeta[chartMetric].label}趋势` : `Daily ${chartMetricMeta[chartMetric].label} Trend`}</h2>
+              <p className="text-xs text-slate-500 mt-0.5">{rangeFilter === "all" ? t("Last 60 days") : `${t("Last")} ${rangeFilter} ${t("days")}`}</p>
             </div>
             <div className="flex gap-1 bg-slate-900/60 rounded-lg p-1 flex-wrap">
               {Object.entries(chartMetricMeta).map(([key, m]) => (
@@ -1974,8 +2063,8 @@ export default function MetaSpendDashboard() {
         {/* Funnel */}
         {(stats.total.impressions > 0 || stats.total.clicks > 0 || stats.total.leads > 0 || stats.total.deposits > 0) && (
           <div className="glass rounded-2xl p-5 md:p-6 mb-6">
-            <h2 className="font-display text-lg font-bold text-white mb-1">Conversion Funnel</h2>
-            <p className="text-xs text-slate-500 mb-5">{rangeFilter === "all" ? "All-time totals" : `Last ${rangeFilter} days`}</p>
+            <h2 className="font-display text-lg font-bold text-white mb-1">{t("Conversion Funnel")}</h2>
+            <p className="text-xs text-slate-500 mb-5">{rangeFilter === "all" ? t("All-time totals") : `${t("Last")} ${rangeFilter} ${t("days")}`}</p>
             <Funnel impressions={stats.total.impressions} clicks={stats.total.clicks} leads={stats.total.leads} deposits={stats.total.deposits} ctr={stats.total.ctr} cvr={stats.total.cvr} l2d={stats.total.l2d} />
           </div>
         )}
@@ -2051,7 +2140,7 @@ export default function MetaSpendDashboard() {
           <div id="entry-form-anchor" className="glass rounded-2xl p-5 md:p-6 mb-6 border-cyan-500/20">
             <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
               <div>
-                <h2 className="font-display text-lg font-bold text-white flex items-center gap-2"><Lock className="w-4 h-4 text-cyan-400" />{editId ? "Edit Campaign Entry" : "Add Campaign Entry"}</h2>
+                <h2 className="font-display text-lg font-bold text-white flex items-center gap-2"><Lock className="w-4 h-4 text-cyan-400" />{editId ? t("Edit Campaign Entry") : t("Add Campaign Entry")}</h2>
                 <p className="text-xs text-cyan-400/80 mt-0.5">Per campaign · Spend required, others optional</p>
               </div>
               <div className="flex gap-2">
@@ -2177,9 +2266,9 @@ export default function MetaSpendDashboard() {
             <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
               <div>
                 <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
-                  <Banknote className="w-4 h-4 text-amber-400" />Daily Deposits by Country
+                  <Banknote className="w-4 h-4 text-amber-400" />{t("Daily Deposits by Country")}
                 </h2>
-                <p className="text-xs text-amber-400/80 mt-0.5">Total deposits per country for the selected date</p>
+                <p className="text-xs text-amber-400/80 mt-0.5">{t("Total deposits per country for the selected date")}</p>
               </div>
             </div>
 
@@ -2202,7 +2291,7 @@ export default function MetaSpendDashboard() {
                     placeholder="0"
                     className="input-base font-mono-num flex-1 max-w-xs"
                   />
-                  <span className="text-xs text-slate-500 hidden md:inline">deposits</span>
+                  <span className="text-xs text-slate-500 hidden md:inline">{t("deposits")}</span>
                   <button onClick={() => handleRemoveGeoFromDepositForm(g)} className="text-slate-500 hover:text-pink-400 p-1">
                     <X className="w-4 h-4" />
                   </button>
@@ -2212,18 +2301,18 @@ export default function MetaSpendDashboard() {
 
             <div className="flex gap-2 mb-4 flex-wrap">
               <select value={addGeoSelect} onChange={(e) => setAddGeoSelect(e.target.value)} className="input-base max-w-xs flex-1">
-                <option value="">+ Add a country…</option>
+                <option value="">{t("+ Add a country…")}</option>
                 {COMMON_GEOS.filter((g) => !activeGeos.includes(g) && g !== "Other").map((g) => <option key={g} value={g}>{g}</option>)}
               </select>
               <button onClick={handleAddGeoToDepositForm} disabled={!addGeoSelect} className="px-4 py-2.5 rounded-lg glass glass-hover text-sm text-slate-200 disabled:opacity-40">Add</button>
             </div>
 
             <button onClick={handleSaveDeposits} className="w-full md:w-auto px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-semibold flex items-center justify-center gap-2">
-              <Check className="w-4 h-4" /> Save deposits for {formatDate(depositDate)}
+              <Check className="w-4 h-4" /> {t("Save deposits for")} {formatDate(depositDate)}
             </button>
 
             <p className="text-[11px] text-slate-500 mt-3">
-              Empty or zero values won't save · existing entries for this date are replaced when you save
+              {t("Empty or zero values won't save · existing entries for this date are replaced when you save")}
             </p>
           </div>
         )}
@@ -2235,10 +2324,10 @@ export default function MetaSpendDashboard() {
               <div>
                 <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
                   <Wallet className="w-4 h-4 text-emerald-400" />
-                  Account Top-up
+                  {t("Account Top-up")}
                 </h2>
                 <p className="text-xs text-emerald-400/80 mt-0.5">
-                  Record budget added to ad accounts
+                  {t("Record budget added to ad accounts")}
                 </p>
               </div>
             </div>
@@ -2284,7 +2373,7 @@ export default function MetaSpendDashboard() {
         <div className="glass rounded-2xl overflow-hidden mb-6">
           <div className="px-5 md:px-6 py-4 border-b border-slate-800/60 flex items-center justify-between flex-wrap gap-3">
             <div>
-              <h2 className="font-display text-lg font-bold text-white">Campaign Entries</h2>
+              <h2 className="font-display text-lg font-bold text-white">{t("Campaign Entries")}</h2>
               <p className="text-xs text-slate-500 mt-0.5">
                 {filteredEntries.length} {filteredEntries.length === 1 ? "entry" : "entries"}
                 {(accountFilter !== "all" || campaignFilter !== "all" || geoFilter !== "all") && " · filtered"}
@@ -2298,7 +2387,7 @@ export default function MetaSpendDashboard() {
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 transition-colors"
                     title="Set account on all currently-filtered entries"
                   >
-                    <Pencil className="w-3 h-3" /> Bulk set account
+                    <Pencil className="w-3 h-3" /> {t("Bulk set account")}
                   </button>
                 ) : (
                   <div className="flex items-center gap-1.5 p-1 rounded-md bg-cyan-500/10 border border-cyan-500/30">
@@ -2342,16 +2431,16 @@ export default function MetaSpendDashboard() {
                 <table className="w-full text-sm min-w-[900px]">
                   <thead>
                     <tr className="text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800/60">
-                      <th className="text-left px-4 py-3 font-medium">Date</th>
-                      <th className="text-left px-4 py-3 font-medium">Account</th>
-                      <th className="text-left px-4 py-3 font-medium">Campaign</th>
-                      <th className="text-left px-4 py-3 font-medium">Geo</th>
-                      <th className="text-right px-4 py-3 font-medium">Spend</th>
-                      <th className="text-right px-4 py-3 font-medium">Impr.</th>
-                      <th className="text-right px-4 py-3 font-medium">Clicks</th>
-                      <th className="text-right px-4 py-3 font-medium">Leads</th>
-                      <th className="text-right px-4 py-3 font-medium">CTR</th>
-                      <th className="text-right px-4 py-3 font-medium">CPL</th>
+                      <th className="text-left px-4 py-3 font-medium">{t("Date")}</th>
+                      <th className="text-left px-4 py-3 font-medium">{t("Account")}</th>
+                      <th className="text-left px-4 py-3 font-medium">{t("Campaign")}</th>
+                      <th className="text-left px-4 py-3 font-medium">{t("Geo")}</th>
+                      <th className="text-right px-4 py-3 font-medium">{t("Spend")}</th>
+                      <th className="text-right px-4 py-3 font-medium">{t("IMPR.")}</th>
+                      <th className="text-right px-4 py-3 font-medium">{t("Clicks")}</th>
+                      <th className="text-right px-4 py-3 font-medium">{t("Leads")}</th>
+                      <th className="text-right px-4 py-3 font-medium">{t("CTR")}</th>
+                      <th className="text-right px-4 py-3 font-medium">{t("CPL")}</th>
                       {isAdmin && <th className="px-4 py-3"></th>}
                     </tr>
                   </thead>
@@ -2445,7 +2534,7 @@ export default function MetaSpendDashboard() {
               <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
                 <Banknote className="w-4 h-4 text-amber-400" /> {t("Daily Deposits")}
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">{filteredDeposits.length} entries</p>
+              <p className="text-xs text-slate-500 mt-0.5">{filteredDeposits.length} {t("entries")}</p>
             </div>
           </div>
 
@@ -2455,7 +2544,7 @@ export default function MetaSpendDashboard() {
               <div className="flex items-center gap-2 mb-3">
                 <Plus className="w-3.5 h-3.5 text-amber-400" />
                 <span className="text-[11px] uppercase tracking-[0.18em] text-amber-300/80 font-medium">
-                  Quick add deposit
+                  {t("Quick add deposit")}
                 </span>
                 {qFlash && (
                   <span className={`text-[11px] px-2 py-0.5 rounded ${
@@ -2586,12 +2675,12 @@ export default function MetaSpendDashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800/60">
-                    <th className="text-left px-4 py-3 font-medium">Date</th>
-                    <th className="text-left px-4 py-3 font-medium">Country</th>
-                    <th className="text-left px-4 py-3 font-medium">Source</th>
+                    <th className="text-left px-4 py-3 font-medium">{t("Date")}</th>
+                    <th className="text-left px-4 py-3 font-medium">{t("Country")}</th>
+                    <th className="text-left px-4 py-3 font-medium">{t("Source")}</th>
                     <th className="text-left px-4 py-3 font-medium">CRM ID</th>
-                    <th className="text-right px-4 py-3 font-medium">Deposits</th>
-                    <th className="text-right px-4 py-3 font-medium">Amount (USD)</th>
+                    <th className="text-right px-4 py-3 font-medium">{t("Deposits")}</th>
+                    <th className="text-right px-4 py-3 font-medium">{t("Amount (USD)")}</th>
                     {isAdmin && <th className="px-4 py-3"></th>}
                   </tr>
                 </thead>
@@ -2800,16 +2889,16 @@ export default function MetaSpendDashboard() {
           <div className="px-5 md:px-6 py-4 border-b border-slate-800/60 flex items-center justify-between">
             <div>
               <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
-                <Wallet className="w-4 h-4 text-emerald-400" /> Top-ups History
+                <Wallet className="w-4 h-4 text-emerald-400" /> {t("Top-ups History")}
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">{topups.length} top-up records</p>
+              <p className="text-xs text-slate-500 mt-0.5">{topups.length} {t("top-up records")}</p>
             </div>
           </div>
           {topups.length === 0 ? (
             <div className="p-12 text-center">
               <Wallet className="w-10 h-10 mx-auto text-slate-700 mb-3" />
               <p className="text-slate-400 text-sm">
-                {isAdmin ? "No top-ups recorded yet. Add one above when you fund an ad account." : "No top-up data yet."}
+                {isAdmin ? t("No top-ups recorded yet. Add one above when you fund an ad account.") : t("No top-up data yet.")}
               </p>
             </div>
           ) : (
@@ -2817,9 +2906,9 @@ export default function MetaSpendDashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800/60">
-                    <th className="text-left px-4 py-3 font-medium">Date</th>
-                    <th className="text-left px-4 py-3 font-medium">Account</th>
-                    <th className="text-left px-4 py-3 font-medium">Notes</th>
+                    <th className="text-left px-4 py-3 font-medium">{t("Date")}</th>
+                    <th className="text-left px-4 py-3 font-medium">{t("Account")}</th>
+                    <th className="text-left px-4 py-3 font-medium">{t("Notes")}</th>
                     <th className="text-right px-4 py-3 font-medium">Amount</th>
                     {isAdmin && <th className="px-4 py-3"></th>}
                   </tr>
@@ -3489,7 +3578,7 @@ function ImportModal({ onClose, onImport }) {
                         ) : (
                           <>
                             {" · "}<span className="text-slate-200">{e.geo}</span>
-                            {" · "}<span className="text-amber-300">{formatNum(e.count)} deposits</span>
+                            {" · "}<span className="text-amber-300">{formatNum(e.count)} {t("deposits")}</span>
                           </>
                         )}
                       </div>
@@ -3860,15 +3949,15 @@ function GeoTable({ items, colors, totalSpend, onRowClick, activeGeo }) {
         <thead>
           <tr className="text-[10px] uppercase tracking-[0.15em] text-slate-500 border-b border-slate-800/60">
             <th className="text-left px-3 py-3 font-medium w-12">#</th>
-            <th className="text-left px-3 py-3 font-medium">Country</th>
-            <th className="text-right px-3 py-3 font-medium">Spend</th>
+            <th className="text-left px-3 py-3 font-medium">{t("Country")}</th>
+            <th className="text-right px-3 py-3 font-medium">{t("Spend")}</th>
             <th className="text-left px-3 py-3 font-medium">Share</th>
-            <th className="text-right px-3 py-3 font-medium">Leads</th>
-            <th className="text-right px-3 py-3 font-medium">CPL</th>
-            <th className="text-right px-3 py-3 font-medium">Deposits</th>
-            <th className="text-right px-3 py-3 font-medium">Dep $</th>
-            <th className="text-right px-3 py-3 font-medium">CPD</th>
-            <th className="text-right px-3 py-3 font-medium">L→D</th>
+            <th className="text-right px-3 py-3 font-medium">{t("Leads")}</th>
+            <th className="text-right px-3 py-3 font-medium">{t("CPL")}</th>
+            <th className="text-right px-3 py-3 font-medium">{t("Deposits")}</th>
+            <th className="text-right px-3 py-3 font-medium">{t("Dep $")}</th>
+            <th className="text-right px-3 py-3 font-medium">{t("CPD")}</th>
+            <th className="text-right px-3 py-3 font-medium">{t("L→D")}</th>
           </tr>
         </thead>
         <tbody>
