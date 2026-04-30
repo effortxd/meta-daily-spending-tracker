@@ -2089,6 +2089,7 @@ export default function MetaSpendDashboard() {
               totalSpend={stats.total.spend}
               activeGeo={geoFilter !== "all" ? geoFilter : null}
               onRowClick={(name) => setGeoFilter(geoFilter === name ? "all" : name)}
+              t={t}
             />
           )}
         </div>
@@ -2097,7 +2098,7 @@ export default function MetaSpendDashboard() {
         <div className="glass rounded-2xl p-5 md:p-6 mb-6">
           <h2 className="font-display text-lg font-bold text-white mb-1">{t("By Account")}</h2>
           <p className="text-xs text-slate-500 mb-4 flex items-center gap-1.5">
-            Account-level split
+            {t("Account-level split")}
             <span className="hidden sm:inline text-slate-600">·</span>
             <span className="hidden sm:inline text-cyan-400/70">💡 Click to filter</span>
           </p>
@@ -3942,7 +3943,7 @@ function Funnel({ impressions, clicks, leads, deposits, ctr, cvr, l2d }) {
   );
 }
 
-function GeoTable({ items, colors, totalSpend, onRowClick, activeGeo }) {
+function GeoTable({ items, colors, totalSpend, onRowClick, activeGeo, t = (s) => s }) {
   return (
     <div className="overflow-x-auto scroll-x">
       <table className="w-full text-sm min-w-[700px]">
