@@ -29,6 +29,7 @@ const FIELD_OPTIONS = [
   { value: "skip", label: "— Skip —" },
   { value: "date", label: "Date" },
   { value: "account", label: "Account" },
+  { value: "campaign", label: "Campaign Name" },
   { value: "geo", label: "Geo" },
   { value: "amount", label: "Spend" },
   { value: "impressions", label: "Impressions" },
@@ -51,7 +52,8 @@ const COLUMN_PATTERNS = [
   { field: "impressions", pattern: /^(impressions|imp\b)/i },
   { field: "clicks", pattern: /^(link[\s_.-]*clicks|clicks|all[\s_.-]*clicks)/i },
   { field: "leads", pattern: /^(leads|results|conversions|registrations|complete[\s_.-]*registration|sign[\s_.-]*ups?)/i },
-  { field: "account", pattern: /^(account|campaign|ad[\s_.-]*set|ad[\s_.-]*name|campaign[\s_.-]*name)/i },
+  { field: "campaign", pattern: /^(campaign[\s_.-]*name|ad[\s_.-]*set[\s_.-]*name|ad[\s_.-]*name|campaign\b|ad[\s_.-]*set\b)/i },
+  { field: "account", pattern: /^(account[\s_.-]*name|account|ad[\s_.-]*account)\b/i },
   { field: "geo", pattern: /^(country|geo|region|location|market)/i },
   { field: "notes", pattern: /^(notes?|description|comment)/i },
 ];
@@ -70,6 +72,7 @@ const DEPOSIT_COLUMN_PATTERNS = [
 const CRM_DEPOSIT_FIELD_OPTIONS = [
   { value: "skip", label: "— Skip —" },
   { value: "datetime", label: "Submission Date/Time" },
+  { value: "crm_id", label: "CRM ID" },
   { value: "source", label: "Source (→ Country)" },
   { value: "amount_usd", label: "Actual Payment Amount (USD)" },
   { value: "currency", label: "Payment Currency (fallback for Country)" },
@@ -78,6 +81,8 @@ const CRM_DEPOSIT_FIELD_OPTIONS = [
 const CRM_DEPOSIT_COLUMN_PATTERNS = [
   // Prefer "Submission Time" over "Processing Time" (first match wins via dedup)
   { field: "datetime", pattern: /^(submission[\s_.-]*time|submitted[\s_.-]*at|order[\s_.-]*time|created[\s_.-]*at|date[\s_.-]*time)/i },
+  // CRM-ID column — typically the first column, used to uniquely identify clients
+  { field: "crm_id", pattern: /^(crm[\s_.-]*id|client[\s_.-]*id|customer[\s_.-]*id|user[\s_.-]*id)\b/i },
   // Source column prefix gives explicit country code (TH_, ID_, etc.) — preferred over currency guess
   { field: "source", pattern: /^(source|order[\s_.-]*source|utm|campaign|landing[\s_.-]*page)\b/i },
   // "Actual Payment Amount(USD)" — what the user explicitly asked for. Matches with or without space before (USD)
@@ -544,6 +549,8 @@ export default function MetaSpendDashboard() {
   const [editingDepositId, setEditingDepositId] = useState(null);
   const [editDepCount, setEditDepCount] = useState("");
   const [editDepAmount, setEditDepAmount] = useState("");
+  const [editDepSource, setEditDepSource] = useState("");
+  const [editDepCrmId, setEditDepCrmId] = useState("");
   const [showAdminPanels, setShowAdminPanels] = useState(false);
   // Hero strip period selector — lets bosses flip the top stat between
   // Today / Yesterday / 7D / 30D / MTD / All-time without affecting filters below.
@@ -557,6 +564,9 @@ export default function MetaSpendDashboard() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       localStorage.setItem("dashboard_lang", lang);
+      // Update <html lang="..."> so the CJK CSS overrides activate.
+      // Browsers map "zh" to all CJK descendants for :lang(zh) matching.
+      document.documentElement.setAttribute("lang", lang === "zh" ? "zh" : "en");
     }
   }, [lang]);
   const t = useT(lang);
@@ -583,6 +593,8 @@ export default function MetaSpendDashboard() {
   const [qGeo, setQGeo] = useState("");
   const [qCount, setQCount] = useState("");
   const [qAmount, setQAmount] = useState("");
+  const [qSource, setQSource] = useState("");
+  const [qCrmId, setQCrmId] = useState("");
   const [qBusy, setQBusy] = useState(false);
   const [qFlash, setQFlash] = useState(null); // { type: 'ok' | 'err', text: string }
   const [activeGeos, setActiveGeos] = useState(["Brazil", "Mexico", "Indonesia", "Thailand"]);
@@ -601,6 +613,7 @@ export default function MetaSpendDashboard() {
   // Filters
   const [rangeFilter, setRangeFilter] = useState("30");
   const [accountFilter, setAccountFilter] = useState("all");
+  const [campaignFilter, setCampaignFilter] = useState("all");
   const [geoFilter, setGeoFilter] = useState("all");
   // Custom date range — when set, overrides rangeFilter quick presets
   const [customStart, setCustomStart] = useState("");
@@ -783,7 +796,7 @@ export default function MetaSpendDashboard() {
 
   // Quick-add a single deposit row without replacing the whole day.
   // If a record exists for that date+geo, it gets replaced (typed value wins).
-  const handleQuickAddDeposit = async (date, geo, count, amount) => {
+  const handleQuickAddDeposit = async (date, geo, count, amount, source, crmId) => {
     const n = parseFloat(count);
     const a = parseFloat(amount);
     if (!date || !geo || isNaN(n) || n <= 0) return false;
@@ -792,6 +805,8 @@ export default function MetaSpendDashboard() {
       id: Date.now().toString() + Math.random().toString(36).slice(2, 7) + geo,
       date, geo, count: n,
       amount: !isNaN(a) && a > 0 ? a : 0,
+      source: (source || "").trim(),
+      crmId: (crmId || "").trim(),
       createdAt: new Date().toISOString(),
     });
     setDeposits(next);
@@ -805,8 +820,7 @@ export default function MetaSpendDashboard() {
     await persistDeposits(next);
   };
 
-  // Update an existing deposit's count, amount, and/or source inline.
-  // newValues is an object like { count?: number, amount?: number, source?: string }
+  // Update an existing deposit's count, amount, source, and/or crmId inline.
   const handleEditDeposit = async (id, newValues) => {
     const next = deposits.map((d) => {
       if (d.id !== id) return d;
@@ -821,6 +835,9 @@ export default function MetaSpendDashboard() {
       }
       if (newValues.source !== undefined) {
         updated.source = String(newValues.source).trim();
+      }
+      if (newValues.crmId !== undefined) {
+        updated.crmId = String(newValues.crmId).trim();
       }
       return updated;
     });
@@ -887,14 +904,18 @@ export default function MetaSpendDashboard() {
     if (dataType === "entries") {
       let toAdd = data.map((e) => ({
         id: Date.now().toString() + Math.random().toString(36).slice(2, 9),
-        date: e.date, account: e.account || "Other", geo: e.geo || "",
+        date: e.date, account: e.account || "Other",
+        campaign: e.campaign || "",
+        geo: e.geo || "",
         amount: e.amount || 0, impressions: e.impressions || 0,
         clicks: e.clicks || 0, leads: e.leads || 0, notes: e.notes || "",
         createdAt: new Date().toISOString(),
       }));
       if (skipDuplicates) {
-        const existing = new Set(entries.map((e) => `${e.date}__${e.account}__${e.geo}`));
-        toAdd = toAdd.filter((e) => !existing.has(`${e.date}__${e.account}__${e.geo}`));
+        // Dedup by date+account+campaign+geo so the same campaign on the same day
+        // for the same country gets replaced rather than duplicated on re-import.
+        const existing = new Set(entries.map((e) => `${e.date}__${e.account}__${e.campaign || ""}__${e.geo}`));
+        toAdd = toAdd.filter((e) => !existing.has(`${e.date}__${e.account}__${e.campaign || ""}__${e.geo}`));
       }
       const next = [...toAdd, ...entries];
       setEntries(next);
@@ -908,6 +929,7 @@ export default function MetaSpendDashboard() {
         date: d.date, geo: d.geo || "Other", count: d.count || 0,
         amount: d.amount || 0,
         source: d.source || "",
+        crmId: d.crmId || "",
         createdAt: new Date().toISOString(),
       }));
       let next = [...deposits];
@@ -1013,6 +1035,10 @@ export default function MetaSpendDashboard() {
     () => Array.from(new Set(entries.map((e) => e.account).filter(Boolean))),
     [entries]
   );
+  const allCampaigns = useMemo(
+    () => Array.from(new Set(entries.map((e) => e.campaign).filter(Boolean))).sort(),
+    [entries]
+  );
   const allGeos = useMemo(() => {
     const s = new Set();
     entries.forEach((e) => { if (e.geo) s.add(e.geo); });
@@ -1040,9 +1066,10 @@ export default function MetaSpendDashboard() {
   const filteredEntries = useMemo(() => {
     let list = entries.filter((e) => inActiveRange(e.date));
     if (accountFilter !== "all") list = list.filter((e) => e.account === accountFilter);
+    if (campaignFilter !== "all") list = list.filter((e) => e.campaign === campaignFilter);
     if (geoFilter !== "all") list = list.filter((e) => e.geo === geoFilter);
     return list.sort((a, b) => b.date.localeCompare(a.date));
-  }, [entries, rangeFilter, accountFilter, geoFilter, customStart, customEnd]);
+  }, [entries, rangeFilter, accountFilter, campaignFilter, geoFilter, customStart, customEnd]);
 
   // Filtered deposits — respects geo + range only (deposits aren't tied to accounts)
   const filteredDeposits = useMemo(() => {
@@ -1102,6 +1129,9 @@ export default function MetaSpendDashboard() {
     if (accountFilter !== "all") {
       entriesScoped = entriesScoped.filter((e) => e.account === accountFilter);
     }
+    if (campaignFilter !== "all") {
+      entriesScoped = entriesScoped.filter((e) => e.campaign === campaignFilter);
+    }
     if (geoFilter !== "all") {
       entriesScoped = entriesScoped.filter((e) => e.geo === geoFilter);
       depositsScoped = depositsScoped.filter((d) => d.geo === geoFilter);
@@ -1139,7 +1169,7 @@ export default function MetaSpendDashboard() {
       ),
       allTime: aggregate(entriesScoped, depositsScoped, config.taxRate),
     };
-  }, [entries, deposits, accountFilter, geoFilter, config.taxRate]);
+  }, [entries, deposits, accountFilter, campaignFilter, geoFilter, config.taxRate]);
 
   const stats = useMemo(() => {
     const today = todayISO();
@@ -1398,7 +1428,7 @@ export default function MetaSpendDashboard() {
                   <div className="text-[10px] uppercase tracking-[0.25em] text-cyan-400/80 mb-2 flex items-center gap-1.5">
                     <Activity className="w-3 h-3" /> {active.label}
                   </div>
-                  <div className="font-mono-num text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-none mb-3">
+                  <div className="font-mono-num text-3xl sm:text-4xl md:text-5xl lg:text-5xl xl:text-6xl font-extrabold text-white leading-none mb-3 truncate">
                     {formatUSD(active.data.spend)}
                   </div>
                   {showDayCompare ? (
@@ -1804,6 +1834,17 @@ export default function MetaSpendDashboard() {
                   {allAccounts.map((a) => <option key={a} value={a}>{a}</option>)}
                 </select>
               )}
+              {allCampaigns.length > 0 && (
+                <select
+                  value={campaignFilter}
+                  onChange={(e) => setCampaignFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-md text-xs bg-slate-900/60 border border-slate-800/60 text-slate-200 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 outline-none transition-colors max-w-[260px]"
+                  title={campaignFilter !== "all" ? campaignFilter : "All campaigns"}
+                >
+                  <option value="all">{t("All campaigns")}</option>
+                  {allCampaigns.map((c) => <option key={c} value={c}>{c.length > 50 ? c.slice(0, 50) + "…" : c}</option>)}
+                </select>
+              )}
               {allGeos.length > 0 && (
                 <select value={geoFilter} onChange={(e) => setGeoFilter(e.target.value)} className="px-3 py-1.5 rounded-md text-xs bg-slate-900/60 border border-slate-800/60 text-slate-200 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 outline-none transition-colors">
                   <option value="all">{t("All countries")}</option>
@@ -1815,6 +1856,9 @@ export default function MetaSpendDashboard() {
               <div className="flex flex-wrap items-center gap-1.5 ml-1">
                 {accountFilter !== "all" && (
                   <FilterChip label={accountFilter} onClear={() => setAccountFilter("all")} color="cyan" />
+                )}
+                {campaignFilter !== "all" && (
+                  <FilterChip label={campaignFilter} onClear={() => setCampaignFilter("all")} color="violet" />
                 )}
                 {geoFilter !== "all" && (
                   <FilterChip label={`${flagFor(geoFilter)} ${geoFilter}`} onClear={() => setGeoFilter("all")} color="emerald" />
@@ -1828,9 +1872,9 @@ export default function MetaSpendDashboard() {
                 )}
               </div>
 
-              {(accountFilter !== "all" || geoFilter !== "all" || rangeFilter !== "30" || customStart || customEnd) && (
+              {(accountFilter !== "all" || campaignFilter !== "all" || geoFilter !== "all" || rangeFilter !== "30" || customStart || customEnd) && (
                 <button
-                  onClick={() => { setAccountFilter("all"); setGeoFilter("all"); setRangeFilter("30"); setCustomStart(""); setCustomEnd(""); }}
+                  onClick={() => { setAccountFilter("all"); setCampaignFilter("all"); setGeoFilter("all"); setRangeFilter("30"); setCustomStart(""); setCustomEnd(""); }}
                   className="ml-auto px-2.5 py-1.5 rounded-md text-[11px] text-slate-500 hover:text-pink-300 hover:bg-pink-500/10 transition-colors flex items-center gap-1"
                   title="Reset everything"
                 >
@@ -2195,6 +2239,7 @@ export default function MetaSpendDashboard() {
                     <tr className="text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800/60">
                       <th className="text-left px-4 py-3 font-medium">Date</th>
                       <th className="text-left px-4 py-3 font-medium">Account</th>
+                      <th className="text-left px-4 py-3 font-medium">Campaign</th>
                       <th className="text-left px-4 py-3 font-medium">Geo</th>
                       <th className="text-right px-4 py-3 font-medium">Spend</th>
                       <th className="text-right px-4 py-3 font-medium">Impr.</th>
@@ -2214,6 +2259,9 @@ export default function MetaSpendDashboard() {
                         <tr key={e.id} className="border-b border-slate-800/40 hover:bg-slate-800/20">
                           <td className="px-4 py-3 text-slate-200 font-mono-num text-xs whitespace-nowrap">{formatDate(e.date)}</td>
                           <td className="px-4 py-3 text-slate-200 text-xs whitespace-nowrap">{e.account}</td>
+                          <td className="px-4 py-3 text-slate-400 text-xs max-w-[280px] truncate" title={e.campaign || ""}>
+                            {e.campaign || <span className="text-slate-700">—</span>}
+                          </td>
                           <td className="px-4 py-3 text-slate-300 text-xs whitespace-nowrap">
                             {e.geo ? <span><span className="mr-1">{flagFor(e.geo)}</span>{e.geo}</span> : "—"}
                           </td>
@@ -2235,7 +2283,7 @@ export default function MetaSpendDashboard() {
                   </tbody>
                   <tfoot>
                     <tr className="bg-slate-900/40">
-                      <td colSpan={3} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400">Period total</td>
+                      <td colSpan={4} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400">Period total</td>
                       <td className="px-4 py-3 text-right font-mono-num text-cyan-300 font-bold text-xs">{formatUSD(stats.total.spend)}</td>
                       <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{formatNumCompact(stats.total.impressions)}</td>
                       <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{formatNumCompact(stats.total.clicks)}</td>
@@ -2312,72 +2360,103 @@ export default function MetaSpendDashboard() {
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr_110px_140px_auto] gap-2">
-                <input
-                  type="date"
-                  value={qDate}
-                  onChange={(e) => setQDate(e.target.value)}
-                  className="input-base text-sm"
-                />
-                <select
-                  value={qGeo}
-                  onChange={(e) => setQGeo(e.target.value)}
-                  className="input-base text-sm"
-                >
-                  <option value="">Select country…</option>
-                  {COMMON_GEOS.filter((g) => g !== "Other").map((g) => (
-                    <option key={g} value={g}>{flagFor(g)} {g}</option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={qCount}
-                  onChange={(e) => setQCount(e.target.value)}
-                  placeholder="Count"
-                  className="input-base text-sm font-mono-num"
-                />
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={qAmount}
-                  onChange={(e) => setQAmount(e.target.value)}
-                  onKeyDown={async (e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const ok = await handleQuickAddDeposit(qDate, qGeo, qCount, qAmount);
+              <div className="space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr_110px_140px_auto] gap-2">
+                  <input
+                    type="date"
+                    value={qDate}
+                    onChange={(e) => setQDate(e.target.value)}
+                    className="input-base text-sm"
+                  />
+                  <select
+                    value={qGeo}
+                    onChange={(e) => setQGeo(e.target.value)}
+                    className="input-base text-sm"
+                  >
+                    <option value="">Select country…</option>
+                    {COMMON_GEOS.filter((g) => g !== "Other").map((g) => (
+                      <option key={g} value={g}>{flagFor(g)} {g}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={qCount}
+                    onChange={(e) => setQCount(e.target.value)}
+                    placeholder="Count"
+                    className="input-base text-sm font-mono-num"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={qAmount}
+                    onChange={(e) => setQAmount(e.target.value)}
+                    placeholder="USD amount (opt)"
+                    className="input-base text-sm font-mono-num"
+                  />
+                  <button
+                    onClick={async () => {
+                      setQBusy(true);
+                      const ok = await handleQuickAddDeposit(qDate, qGeo, qCount, qAmount, qSource, qCrmId);
                       if (ok) {
                         setQFlash({ type: "ok", text: "Saved" });
-                        setQGeo(""); setQCount(""); setQAmount("");
+                        setQGeo(""); setQCount(""); setQAmount(""); setQSource(""); setQCrmId("");
                       } else {
                         setQFlash({ type: "err", text: "Pick country & count > 0" });
                       }
                       setTimeout(() => setQFlash(null), 2000);
-                    }
-                  }}
-                  placeholder="USD amount (opt)"
-                  className="input-base text-sm font-mono-num"
-                />
-                <button
-                  onClick={async () => {
-                    setQBusy(true);
-                    const ok = await handleQuickAddDeposit(qDate, qGeo, qCount, qAmount);
-                    if (ok) {
-                      setQFlash({ type: "ok", text: "Saved" });
-                      setQGeo(""); setQCount(""); setQAmount("");
-                    } else {
-                      setQFlash({ type: "err", text: "Pick country & count > 0" });
-                    }
-                    setTimeout(() => setQFlash(null), 2000);
-                    setQBusy(false);
-                  }}
-                  disabled={qBusy || !qGeo || !qCount}
-                  className="px-4 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-semibold flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Check className="w-4 h-4" /> Add
-                </button>
+                      setQBusy(false);
+                    }}
+                    disabled={qBusy || !qGeo || !qCount}
+                    className="px-4 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-semibold flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Check className="w-4 h-4" /> Add
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={qSource}
+                    onChange={(e) => setQSource(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const ok = await handleQuickAddDeposit(qDate, qGeo, qCount, qAmount, qSource, qCrmId);
+                        if (ok) {
+                          setQFlash({ type: "ok", text: "Saved" });
+                          setQGeo(""); setQCount(""); setQAmount(""); setQSource(""); setQCrmId("");
+                        } else {
+                          setQFlash({ type: "err", text: "Pick country & count > 0" });
+                        }
+                        setTimeout(() => setQFlash(null), 2000);
+                      }
+                    }}
+                    placeholder="Source — e.g. TH_LP_DC2_2026 (opt)"
+                    className="input-base text-sm font-mono"
+                  />
+                  <input
+                    type="text"
+                    value={qCrmId}
+                    onChange={(e) => setQCrmId(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const ok = await handleQuickAddDeposit(qDate, qGeo, qCount, qAmount, qSource, qCrmId);
+                        if (ok) {
+                          setQFlash({ type: "ok", text: "Saved" });
+                          setQGeo(""); setQCount(""); setQAmount(""); setQSource(""); setQCrmId("");
+                        } else {
+                          setQFlash({ type: "err", text: "Pick country & count > 0" });
+                        }
+                        setTimeout(() => setQFlash(null), 2000);
+                      }
+                    }}
+                    placeholder="CRM ID — e.g. 106252 (opt)"
+                    className="input-base text-sm font-mono"
+                  />
+                </div>
               </div>
               {qDate && qGeo && (() => {
                 const existing = deposits.find((d) => d.date === qDate && d.geo === qGeo);
@@ -2405,6 +2484,7 @@ export default function MetaSpendDashboard() {
                     <th className="text-left px-4 py-3 font-medium">Date</th>
                     <th className="text-left px-4 py-3 font-medium">Country</th>
                     <th className="text-left px-4 py-3 font-medium">Source</th>
+                    <th className="text-left px-4 py-3 font-medium">CRM ID</th>
                     <th className="text-right px-4 py-3 font-medium">Deposits</th>
                     <th className="text-right px-4 py-3 font-medium">Amount (USD)</th>
                     {isAdmin && <th className="px-4 py-3"></th>}
@@ -2418,15 +2498,24 @@ export default function MetaSpendDashboard() {
                       setEditingDepositId(d.id);
                       setEditDepCount(String(d.count || ""));
                       setEditDepAmount(String(d.amount || ""));
+                      setEditDepSource(String(d.source || ""));
+                      setEditDepCrmId(String(d.crmId || ""));
                     };
                     const saveEdit = async () => {
-                      await handleEditDeposit(d.id, { count: editDepCount, amount: editDepAmount });
+                      await handleEditDeposit(d.id, {
+                        count: editDepCount,
+                        amount: editDepAmount,
+                        source: editDepSource,
+                        crmId: editDepCrmId,
+                      });
                       setEditingDepositId(null);
                     };
                     const cancelEdit = () => {
                       setEditingDepositId(null);
                       setEditDepCount("");
                       setEditDepAmount("");
+                      setEditDepSource("");
+                      setEditDepCrmId("");
                     };
                     return (
                       <tr
@@ -2439,8 +2528,55 @@ export default function MetaSpendDashboard() {
                         <td className="px-4 py-3 text-slate-200 text-xs">
                           <span className="mr-1.5">{flagFor(d.geo)}</span>{d.geo}
                         </td>
-                        <td className="px-4 py-3 text-slate-400 text-xs font-mono max-w-xs truncate" title={d.source || `Auto: ${displaySource(d)}`}>
-                          {d.source ? <span className="text-slate-300">{d.source}</span> : <span className="text-slate-600">{displaySource(d)}</span>}
+                        <td className="px-4 py-3 text-xs font-mono max-w-[200px]">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editDepSource}
+                              onChange={(e) => setEditDepSource(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveEdit();
+                                if (e.key === "Escape") cancelEdit();
+                              }}
+                              placeholder="TH_LP_DC2_2026"
+                              className="w-full px-2 py-1 rounded bg-slate-900/80 border border-cyan-500/40 text-slate-200 text-xs font-mono focus:outline-none focus:border-cyan-500"
+                            />
+                          ) : (
+                            <span
+                              onClick={startEditing}
+                              className={`block truncate ${
+                                isAdmin ? "cursor-pointer hover:bg-slate-800/40 px-2 py-1 -mx-2 -my-1 rounded transition-colors" : ""
+                              }`}
+                              title={d.source || (isAdmin ? "Click to add source" : `Auto: ${displaySource(d)}`)}
+                            >
+                              {d.source ? <span className="text-slate-300">{d.source}</span> : <span className="text-slate-600">{isAdmin ? "add…" : displaySource(d)}</span>}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-mono max-w-[140px]">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editDepCrmId}
+                              onChange={(e) => setEditDepCrmId(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveEdit();
+                                if (e.key === "Escape") cancelEdit();
+                              }}
+                              placeholder="106252"
+                              className="w-full px-2 py-1 rounded bg-slate-900/80 border border-cyan-500/40 text-slate-200 text-xs font-mono focus:outline-none focus:border-cyan-500"
+                            />
+                          ) : (
+                            <span
+                              onClick={startEditing}
+                              className={`block truncate ${
+                                isAdmin ? "cursor-pointer hover:bg-slate-800/40 px-2 py-1 -mx-2 -my-1 rounded transition-colors" : ""
+                              }`}
+                              title={d.crmId || (isAdmin ? "Click to add CRM ID" : "")}
+                            >
+                              {d.crmId ? <span className="text-slate-300">{d.crmId}</span> : <span className="text-slate-700">{isAdmin ? "add…" : "—"}</span>}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right">
                           {isEditing ? (
@@ -2543,7 +2679,7 @@ export default function MetaSpendDashboard() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-900/40">
-                    <td colSpan={3} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400">Period total</td>
+                    <td colSpan={4} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400">Period total</td>
                     <td className="px-4 py-3 text-right font-mono-num text-amber-300 font-bold text-xs">{formatNum(stats.total.deposits)}</td>
                     <td className="px-4 py-3 text-right font-mono-num text-emerald-300 font-bold text-xs">{stats.total.depositAmount ? formatUSD(stats.total.depositAmount) : "—"}</td>
                     {isAdmin && <td></td>}
@@ -2868,9 +3004,9 @@ function ImportModal({ onClose, onImport }) {
     // Country resolution priority: Source column prefix (TH_, ID_, etc.)
     //   → Currency code mapping (THB → Thailand) → defaultGeo fallback.
     if (dataType === "crm_deposits") {
-      const buckets = new Map(); // key: `${date}|${country}` → { count, amount }
+      const buckets = new Map(); // key: `${date}|${country}` → { count, amount, sources, crmIds }
       parsedRows.forEach((row) => {
-        let dateRaw = null, currency = null, sourceText = null, amount = 0, geo = null;
+        let dateRaw = null, currency = null, sourceText = null, amount = 0, geo = null, crmId = null;
         columnMapping.forEach((field, i) => {
           if (field === "skip") return;
           const v = row[i];
@@ -2891,6 +3027,8 @@ function ImportModal({ onClose, onImport }) {
             currency = String(v || "").trim().toUpperCase();
           } else if (field === "source") {
             sourceText = String(v || "").trim();
+          } else if (field === "crm_id") {
+            crmId = String(v || "").trim();
           } else if (field === "amount_usd") {
             const n = parseNumberLoose(v);
             if (n != null) amount = n;
@@ -2914,41 +3052,46 @@ function ImportModal({ onClose, onImport }) {
         if (!dateRaw || !geo) return;
 
         const key = `${dateRaw}|${geo}`;
-        const existing = buckets.get(key) || { count: 0, amount: 0, sources: new Set() };
+        const existing = buckets.get(key) || { count: 0, amount: 0, sources: new Set(), crmIds: new Set() };
         existing.count += 1;
         existing.amount += amount;
         if (sourceText) existing.sources.add(sourceText);
+        if (crmId) existing.crmIds.add(crmId);
         buckets.set(key, existing);
       });
-      buckets.forEach(({ count, amount, sources }, key) => {
+      buckets.forEach(({ count, amount, sources, crmIds }, key) => {
         const [date, geo] = key.split("|");
-        // Join unique sources with comma — typically just 1-2 per bucket
-        // (e.g. "TH_LP_DC2_2026" or "ID_LP_DC1_2026, ID_LP_DC3_2026")
         const source = sources && sources.size > 0 ? Array.from(sources).join(", ") : "";
-        out.push({ date, geo, count, amount: parseFloat(amount.toFixed(2)), source });
+        const crmId = crmIds && crmIds.size > 0 ? Array.from(crmIds).join(", ") : "";
+        out.push({ date, geo, count, amount: parseFloat(amount.toFixed(2)), source, crmId });
       });
       return out;
     }
 
     parsedRows.forEach((row) => {
       if (dataType === "entries") {
-        const entry = { date: null, account: defaultAccount || "Other", geo: defaultGeo || "", amount: 0, impressions: 0, clicks: 0, leads: 0, notes: "" };
+        const entry = { date: null, account: defaultAccount || "Other", campaign: "", geo: defaultGeo || "", amount: 0, impressions: 0, clicks: 0, leads: 0, notes: "" };
         columnMapping.forEach((field, i) => {
           if (field === "skip") return;
           const v = row[i];
           if (field === "date") entry.date = parseDate(v);
           else if (field === "account") entry.account = String(v || "").trim() || entry.account;
+          else if (field === "campaign") entry.campaign = String(v || "").trim();
           else if (field === "geo") entry.geo = normalizeGeo(String(v || "").trim()) || entry.geo;
           else if (field === "notes") entry.notes = String(v || "").trim();
           else { const n = parseNumberLoose(v); if (n != null) entry[field] = n; }
         });
         // Auto-extract geo from campaign name if not already set.
-        // Checks Account first, then Notes — so users can map "Campaign name"
-        // to either field. The bracketed prefix is stripped from whichever
-        // field actually contained it.
+        // Checks Campaign first, then Account, then Notes — so users can map
+        // "Campaign name" to whichever field they prefer. The bracketed prefix
+        // is stripped from whichever field actually contained it.
         if (autoExtractGeo && !entry.geo) {
           let source = null;
-          if (entry.account) {
+          if (entry.campaign) {
+            const ext = extractGeoFromText(entry.campaign);
+            if (ext) source = { ext, field: "campaign", value: entry.campaign };
+          }
+          if (!source && entry.account) {
             const ext = extractGeoFromText(entry.account);
             if (ext) source = { ext, field: "account", value: entry.account };
           }
@@ -3506,21 +3649,28 @@ function HeroStat({ label, value, sublabel, icon, accent }) {
     cyan: { glow: "rgba(34,211,238,0.18)", text: "text-cyan-400" },
   };
   const ac = accents[accent] || accents.cyan;
+  // Detect CJK characters — Chinese/Japanese/Korean labels need tighter
+  // letter-spacing and no uppercase to avoid awkward wrapping.
+  const labelStr = String(label || "");
+  const hasCJK = /[\u3000-\u9fff\uac00-\ud7af]/.test(labelStr);
+  const labelClass = hasCJK
+    ? `relative text-[11px] tracking-normal whitespace-nowrap ${ac.text} mb-1.5 flex items-center gap-1.5 min-w-0`
+    : `relative text-[10px] uppercase tracking-[0.2em] whitespace-nowrap ${ac.text} mb-1.5 flex items-center gap-1.5 min-w-0`;
   return (
-    <div className="p-5 md:p-6 lg:p-5 border-r last:border-r-0 lg:border-b-0 border-slate-800/60 relative group hover:bg-slate-900/30 transition-colors">
+    <div className="p-3 md:p-5 lg:p-4 xl:p-5 border-r last:border-r-0 lg:border-b-0 border-slate-800/60 relative group hover:bg-slate-900/30 transition-colors min-w-0 overflow-hidden">
       <div
         className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
         style={{ background: `radial-gradient(circle at 50% 50%, ${ac.glow}, transparent 70%)` }}
       />
-      <div className={`relative text-[10px] uppercase tracking-[0.2em] ${ac.text} mb-1.5 flex items-center gap-1.5`}>
-        {icon}
-        {label}
+      <div className={labelClass}>
+        <span className="shrink-0">{icon}</span>
+        <span className="truncate">{label}</span>
       </div>
-      <div className="relative font-mono-num text-2xl md:text-3xl font-bold text-white leading-none">
+      <div className="relative font-mono-num text-xl md:text-2xl xl:text-3xl font-bold text-white leading-none truncate">
         {value}
       </div>
       {sublabel && (
-        <div className="relative text-[10px] text-slate-400 font-mono-num mt-1">
+        <div className="relative text-[10px] text-slate-400 font-mono-num mt-1 truncate">
           {sublabel}
         </div>
       )}
@@ -3611,6 +3761,7 @@ function GeoTable({ items, colors, totalSpend, onRowClick, activeGeo }) {
             <th className="text-right px-3 py-3 font-medium">Leads</th>
             <th className="text-right px-3 py-3 font-medium">CPL</th>
             <th className="text-right px-3 py-3 font-medium">Deposits</th>
+            <th className="text-right px-3 py-3 font-medium">Dep $</th>
             <th className="text-right px-3 py-3 font-medium">CPD</th>
             <th className="text-right px-3 py-3 font-medium">L→D</th>
           </tr>
@@ -3665,6 +3816,9 @@ function GeoTable({ items, colors, totalSpend, onRowClick, activeGeo }) {
                 </td>
                 <td className="px-3 py-3 text-right font-mono-num text-amber-300 text-xs font-bold">
                   {a.deposits ? formatNumCompact(a.deposits) : "—"}
+                </td>
+                <td className="px-3 py-3 text-right font-mono-num text-emerald-300 text-xs font-semibold">
+                  {a.depositAmount > 0 ? formatUSDCompact(a.depositAmount) : "—"}
                 </td>
                 <td className="px-3 py-3 text-right font-mono-num text-cyan-300 text-xs font-semibold">
                   {a.cpd != null ? formatUSDCompact(a.cpd) : "—"}
