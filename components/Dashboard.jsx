@@ -1439,7 +1439,6 @@ export default function MetaSpendDashboard() {
               )}
             </div>
           </div>
-          </div>
         </div>
 
         {/* Chart */}
