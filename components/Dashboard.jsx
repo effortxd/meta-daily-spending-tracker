@@ -330,6 +330,12 @@ export default function MetaSpendDashboard() {
   const [rangeFilter, setRangeFilter] = useState("30");
   const [accountFilter, setAccountFilter] = useState("all");
   const [geoFilter, setGeoFilter] = useState("all");
+  // Custom date range — when set, overrides rangeFilter quick presets
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+  const [showCustomRange, setShowCustomRange] = useState(false);
+  // Quick search bar — natural language filter input
+  const [quickSearch, setQuickSearch] = useState("");
   const [chartMetric, setChartMetric] = useState("spend");
 
   const [, setTick] = useState(0);
@@ -714,27 +720,35 @@ export default function MetaSpendDashboard() {
   }, [entries, deposits]);
 
   // Filtered campaign entries — respects account + geo + range
-  const filteredEntries = useMemo(() => {
-    let list = [...entries];
-    if (rangeFilter !== "all") {
-      const cutoff = daysAgoISO(parseInt(rangeFilter, 10));
-      list = list.filter((e) => e.date >= cutoff);
+  // Active date range — custom range overrides the quick preset when set
+  const activeRange = useMemo(() => {
+    if (customStart && customEnd) {
+      return { start: customStart, end: customEnd, isCustom: true };
     }
+    if (rangeFilter === "all") return { start: null, end: null, isCustom: false };
+    return { start: daysAgoISO(parseInt(rangeFilter, 10)), end: null, isCustom: false };
+  }, [rangeFilter, customStart, customEnd]);
+
+  const inActiveRange = (dateStr) => {
+    if (!activeRange.start) return true;
+    if (dateStr < activeRange.start) return false;
+    if (activeRange.end && dateStr > activeRange.end) return false;
+    return true;
+  };
+
+  const filteredEntries = useMemo(() => {
+    let list = entries.filter((e) => inActiveRange(e.date));
     if (accountFilter !== "all") list = list.filter((e) => e.account === accountFilter);
     if (geoFilter !== "all") list = list.filter((e) => e.geo === geoFilter);
     return list.sort((a, b) => b.date.localeCompare(a.date));
-  }, [entries, rangeFilter, accountFilter, geoFilter]);
+  }, [entries, rangeFilter, accountFilter, geoFilter, customStart, customEnd]);
 
   // Filtered deposits — respects geo + range only (deposits aren't tied to accounts)
   const filteredDeposits = useMemo(() => {
-    let list = [...deposits];
-    if (rangeFilter !== "all") {
-      const cutoff = daysAgoISO(parseInt(rangeFilter, 10));
-      list = list.filter((d) => d.date >= cutoff);
-    }
+    let list = deposits.filter((d) => inActiveRange(d.date));
     if (geoFilter !== "all") list = list.filter((d) => d.geo === geoFilter);
     return list.sort((a, b) => b.date.localeCompare(a.date));
-  }, [deposits, rangeFilter, geoFilter]);
+  }, [deposits, rangeFilter, geoFilter, customStart, customEnd]);
 
   // Multi-period summary stats — independent of the date range filter so the
   // summary table can show Today / 7D / 30D / MTD / All-time side by side.
@@ -1310,28 +1324,80 @@ export default function MetaSpendDashboard() {
           </div>
         )}
 
-        {/* Filters — sticky on scroll for always-accessible drilling */}
-        <div className="sticky top-0 z-30 -mx-4 md:-mx-8 px-4 md:px-8 py-3 mb-5 backdrop-blur-xl bg-[#0a0e1a]/80 border-y border-slate-800/40">
-          <div className="max-w-7xl mx-auto flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-slate-500 mr-1">
-              <Filter className="w-3 h-3" />Filter
-            </div>
-            <div className="flex gap-1 p-0.5 bg-slate-900/60 rounded-lg border border-slate-800/60">
-              {[["7", "7D"], ["30", "30D"], ["90", "90D"], ["all", "All"]].map(([val, label]) => (
+        {/* Filters — sticky on scroll, designed for non-technical viewers
+            to drill into data with one click. Includes view presets, custom
+            date range picker, active-filter chips, and a quick search box. */}
+        <div className="sticky top-0 z-30 -mx-4 md:-mx-8 px-4 md:px-8 py-3 mb-5 backdrop-blur-xl bg-[#0a0e1a]/85 border-y border-slate-800/40 shadow-lg shadow-black/20">
+          <div className="max-w-7xl mx-auto space-y-2.5">
+
+            {/* Row 1: View presets — one-click answers to common questions */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-slate-500 mr-1 shrink-0">
+                <Sparkles className="w-3 h-3" /> Quick view
+              </div>
+              {[
+                { label: "Today", onClick: () => { setRangeFilter("1"); setCustomStart(""); setCustomEnd(""); setAccountFilter("all"); setGeoFilter("all"); }, active: rangeFilter === "1" && !customStart && accountFilter === "all" && geoFilter === "all" },
+                { label: "Yesterday", onClick: () => { const y = daysAgoISO(1); setCustomStart(y); setCustomEnd(y); setAccountFilter("all"); setGeoFilter("all"); }, active: customStart === daysAgoISO(1) && customEnd === daysAgoISO(1) },
+                { label: "This week", onClick: () => { setRangeFilter("7"); setCustomStart(""); setCustomEnd(""); }, active: rangeFilter === "7" && !customStart },
+                { label: "This month", onClick: () => { const monthStart = todayISO().slice(0, 7) + "-01"; setCustomStart(monthStart); setCustomEnd(todayISO()); }, active: customStart === (todayISO().slice(0, 7) + "-01") && customEnd === todayISO() },
+                { label: "Last 30d", onClick: () => { setRangeFilter("30"); setCustomStart(""); setCustomEnd(""); }, active: rangeFilter === "30" && !customStart },
+                { label: "All time", onClick: () => { setRangeFilter("all"); setCustomStart(""); setCustomEnd(""); }, active: rangeFilter === "all" && !customStart },
+              ].map((preset) => (
                 <button
-                  key={val}
-                  onClick={() => setRangeFilter(val)}
-                  className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
-                    rangeFilter === val
-                      ? "bg-cyan-500/25 text-cyan-300 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.4)]"
-                      : "text-slate-500 hover:text-slate-200"
+                  key={preset.label}
+                  onClick={preset.onClick}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all whitespace-nowrap ${
+                    preset.active
+                      ? "bg-cyan-500/20 text-cyan-300 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.4)]"
+                      : "bg-slate-900/40 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
                   }`}
                 >
-                  {label}
+                  {preset.label}
                 </button>
               ))}
+              <button
+                onClick={() => setShowCustomRange(!showCustomRange)}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all whitespace-nowrap flex items-center gap-1 ${
+                  showCustomRange || (customStart && customEnd)
+                    ? "bg-violet-500/20 text-violet-300 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.4)]"
+                    : "bg-slate-900/40 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+                }`}
+              >
+                <Calendar className="w-3 h-3" /> Custom
+              </button>
             </div>
-            <div className="ml-auto flex items-center gap-2 flex-wrap">
+
+            {/* Custom date range picker — collapsible */}
+            {showCustomRange && (
+              <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-lg bg-violet-500/5 border border-violet-500/20">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-violet-400 mr-1">Range:</span>
+                <input
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="px-2.5 py-1 rounded-md text-xs bg-slate-900/60 border border-slate-800/60 text-slate-200 focus:border-violet-500/50 outline-none"
+                />
+                <span className="text-slate-500 text-xs">→</span>
+                <input
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="px-2.5 py-1 rounded-md text-xs bg-slate-900/60 border border-slate-800/60 text-slate-200 focus:border-violet-500/50 outline-none"
+                />
+                {(customStart || customEnd) && (
+                  <button
+                    onClick={() => { setCustomStart(""); setCustomEnd(""); }}
+                    className="text-[11px] text-slate-500 hover:text-slate-200 px-2"
+                  >Clear range</button>
+                )}
+              </div>
+            )}
+
+            {/* Row 2: Account + Country dropdowns + active filter chips */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-slate-500 mr-1 shrink-0">
+                <Filter className="w-3 h-3" /> Filter
+              </div>
               {allAccounts.length > 0 && (
                 <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} className="px-3 py-1.5 rounded-md text-xs bg-slate-900/60 border border-slate-800/60 text-slate-200 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 outline-none transition-colors">
                   <option value="all">All accounts</option>
@@ -1344,16 +1410,35 @@ export default function MetaSpendDashboard() {
                   {allGeos.map((g) => <option key={g} value={g}>{flagFor(g)} {g}</option>)}
                 </select>
               )}
-              {(accountFilter !== "all" || geoFilter !== "all" || rangeFilter !== "30") && (
+
+              {/* Active filter chips — visual confirmation of what's applied */}
+              <div className="flex flex-wrap items-center gap-1.5 ml-1">
+                {accountFilter !== "all" && (
+                  <FilterChip label={accountFilter} onClear={() => setAccountFilter("all")} color="cyan" />
+                )}
+                {geoFilter !== "all" && (
+                  <FilterChip label={`${flagFor(geoFilter)} ${geoFilter}`} onClear={() => setGeoFilter("all")} color="emerald" />
+                )}
+                {customStart && customEnd && (
+                  <FilterChip
+                    label={customStart === customEnd ? `📅 ${formatShortDate(customStart)}` : `📅 ${formatShortDate(customStart)} → ${formatShortDate(customEnd)}`}
+                    onClear={() => { setCustomStart(""); setCustomEnd(""); }}
+                    color="violet"
+                  />
+                )}
+              </div>
+
+              {(accountFilter !== "all" || geoFilter !== "all" || rangeFilter !== "30" || customStart || customEnd) && (
                 <button
-                  onClick={() => { setAccountFilter("all"); setGeoFilter("all"); setRangeFilter("30"); }}
-                  className="px-2.5 py-1.5 rounded-md text-[11px] text-slate-500 hover:text-slate-200 hover:bg-slate-800/60 transition-colors flex items-center gap-1"
-                  title="Clear all filters"
+                  onClick={() => { setAccountFilter("all"); setGeoFilter("all"); setRangeFilter("30"); setCustomStart(""); setCustomEnd(""); }}
+                  className="ml-auto px-2.5 py-1.5 rounded-md text-[11px] text-slate-500 hover:text-pink-300 hover:bg-pink-500/10 transition-colors flex items-center gap-1"
+                  title="Reset everything"
                 >
-                  <X className="w-3 h-3" /> Clear
+                  <X className="w-3 h-3" /> Reset all
                 </button>
               )}
             </div>
+          </div>
           </div>
         </div>
 
@@ -1424,22 +1509,42 @@ export default function MetaSpendDashboard() {
             <Globe className="w-4 h-4 text-emerald-400" />
             <h2 className="font-display text-lg font-bold text-white">Performance by Country</h2>
           </div>
-          <p className="text-xs text-slate-500 mb-4">Spend, leads, and deposits per market</p>
+          <p className="text-xs text-slate-500 mb-4 flex items-center gap-1.5">
+            Spend, leads, and deposits per market
+            <span className="hidden sm:inline text-slate-600">·</span>
+            <span className="hidden sm:inline text-cyan-400/70">💡 Click any row to filter</span>
+          </p>
           {byGeo.length === 0 ? (
             <p className="text-sm text-slate-500 py-8 text-center">No geo data yet</p>
           ) : (
-            <GeoTable items={byGeo} colors={geoColors} totalSpend={stats.total.spend} />
+            <GeoTable
+              items={byGeo}
+              colors={geoColors}
+              totalSpend={stats.total.spend}
+              activeGeo={geoFilter !== "all" ? geoFilter : null}
+              onRowClick={(name) => setGeoFilter(geoFilter === name ? "all" : name)}
+            />
           )}
         </div>
 
         {/* By Account */}
         <div className="glass rounded-2xl p-5 md:p-6 mb-6">
           <h2 className="font-display text-lg font-bold text-white mb-1">By Account</h2>
-          <p className="text-xs text-slate-500 mb-4">Account-level split</p>
+          <p className="text-xs text-slate-500 mb-4 flex items-center gap-1.5">
+            Account-level split
+            <span className="hidden sm:inline text-slate-600">·</span>
+            <span className="hidden sm:inline text-cyan-400/70">💡 Click to filter</span>
+          </p>
           {byAccount.length === 0 ? (
             <p className="text-sm text-slate-500 py-8 text-center">No data yet</p>
           ) : (
-            <BreakdownList items={byAccount} colors={accountColors} totalSpend={stats.total.spend} />
+            <BreakdownList
+              items={byAccount}
+              colors={accountColors}
+              totalSpend={stats.total.spend}
+              activeItem={accountFilter !== "all" ? accountFilter : null}
+              onItemClick={(name) => setAccountFilter(accountFilter === name ? "all" : name)}
+            />
           )}
         </div>
 
@@ -2719,6 +2824,27 @@ function DeleteModal({
 }
 
 // Helpers
+function FilterChip({ label, onClear, color = "cyan" }) {
+  const colors = {
+    cyan: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/25",
+    emerald: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25",
+    violet: "bg-violet-500/15 text-violet-300 border-violet-500/30 hover:bg-violet-500/25",
+    amber: "bg-amber-500/15 text-amber-300 border-amber-500/30 hover:bg-amber-500/25",
+  };
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border ${colors[color]} transition-colors`}>
+      <span className="truncate max-w-[140px]">{label}</span>
+      <button
+        onClick={onClear}
+        className="rounded-sm hover:bg-white/10 p-0.5 -mr-0.5"
+        aria-label="Clear filter"
+      >
+        <X className="w-2.5 h-2.5" />
+      </button>
+    </span>
+  );
+}
+
 function HeroStat({ label, value, icon, accent }) {
   const accents = {
     emerald: { glow: "rgba(52,211,153,0.18)", text: "text-emerald-400" },
@@ -2814,7 +2940,7 @@ function Funnel({ impressions, clicks, leads, deposits, ctr, cvr, l2d }) {
   );
 }
 
-function GeoTable({ items, colors, totalSpend }) {
+function GeoTable({ items, colors, totalSpend, onRowClick, activeGeo }) {
   return (
     <div className="overflow-x-auto scroll-x">
       <table className="w-full text-sm min-w-[700px]">
@@ -2838,7 +2964,15 @@ function GeoTable({ items, colors, totalSpend }) {
             return (
               <tr
                 key={a.name}
-                className="border-b border-slate-800/40 hover:bg-slate-800/30 transition-colors group"
+                onClick={() => onRowClick && onRowClick(a.name)}
+                className={`border-b border-slate-800/40 transition-colors group ${
+                  onRowClick ? "cursor-pointer" : ""
+                } ${
+                  activeGeo === a.name
+                    ? "bg-cyan-500/10 hover:bg-cyan-500/15"
+                    : "hover:bg-slate-800/30"
+                }`}
+                title={onRowClick ? `Click to filter dashboard to ${a.name}` : undefined}
               >
                 <td className="px-3 py-3 text-xs font-mono-num text-slate-600 group-hover:text-slate-400 transition-colors">
                   {String(i + 1).padStart(2, "0")}
@@ -2889,14 +3023,23 @@ function GeoTable({ items, colors, totalSpend }) {
   );
 }
 
-function BreakdownList({ items, colors, totalSpend }) {
+function BreakdownList({ items, colors, totalSpend, onItemClick, activeItem }) {
   return (
     <div className="space-y-3">
       {items.map((a, i) => {
         const pct = totalSpend > 0 ? (a.spend / totalSpend) * 100 : 0;
         const color = colors[i % colors.length];
+        const isActive = activeItem === a.name;
+        const isClickable = !!onItemClick;
         return (
-          <div key={a.name}>
+          <div
+            key={a.name}
+            onClick={() => onItemClick && onItemClick(a.name)}
+            className={`-mx-2 px-2 py-1.5 rounded-lg transition-colors ${
+              isClickable ? "cursor-pointer hover:bg-slate-800/40" : ""
+            } ${isActive ? "bg-cyan-500/10 ring-1 ring-cyan-500/30" : ""}`}
+            title={isClickable ? `Click to filter to ${a.name}` : undefined}
+          >
             <div className="flex items-center justify-between text-sm mb-1.5">
               <div className="flex items-center gap-2 min-w-0 pr-2">
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
