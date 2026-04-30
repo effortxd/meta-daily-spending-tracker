@@ -1291,7 +1291,7 @@ export default function MetaSpendDashboard() {
   };
 
   return (
-    <div className="min-h-screen text-slate-100 p-4 md:p-8" style={{ background: "radial-gradient(1200px 600px at 10% -10%, rgba(34,211,238,0.08), transparent 60%), radial-gradient(900px 500px at 100% 0%, rgba(167,139,250,0.06), transparent 60%), #0a0e1a", fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif" }}>
+    <div className="min-h-screen text-slate-100 p-3 sm:p-4 md:p-8" style={{ background: "radial-gradient(1200px 600px at 10% -10%, rgba(34,211,238,0.08), transparent 60%), radial-gradient(900px 500px at 100% 0%, rgba(167,139,250,0.06), transparent 60%), #0a0e1a", fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
         .font-display { font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.02em; }
@@ -1310,20 +1310,20 @@ export default function MetaSpendDashboard() {
 
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
-          <div>
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-cyan-400/80 mb-2">
+        <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 md:gap-4 mb-6 md:mb-8">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[10px] md:text-xs uppercase tracking-[0.25em] text-cyan-400/80 mb-1.5 md:mb-2">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span>
-              {t("LIVE · META ADS PERFORMANCE")}
+              <span className="truncate">{t("LIVE · META ADS PERFORMANCE")}</span>
             </div>
-            <h1 className="font-display text-3xl md:text-5xl font-extrabold text-white">{t("Daily Performance Dashboard")}</h1>
-            <p className="text-slate-400 mt-2 text-sm flex items-center gap-3 flex-wrap">
+            <h1 className="font-display text-2xl sm:text-3xl md:text-5xl font-extrabold text-white leading-tight">{t("Daily Performance Dashboard")}</h1>
+            <p className="text-slate-400 mt-1.5 md:mt-2 text-xs md:text-sm flex items-center gap-2 md:gap-3 flex-wrap">
               <span>{new Date().toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
-              <span className="text-slate-600">·</span>
+              <span className="text-slate-600 hidden sm:inline">·</span>
               <span className="text-slate-500">{t("Updated")} {timeAgo(config.lastUpdated, lang)}</span>
               {(config.taxRate || 0) > 0 && (
                 <>
-                  <span className="text-slate-600">·</span>
+                  <span className="text-slate-600 hidden sm:inline">·</span>
                   <span className="text-amber-400/80">
                     {t("Spend incl.")} {((config.taxRate || 0) * 100).toFixed(0)}% {t("tax")}
                   </span>
@@ -1331,44 +1331,44 @@ export default function MetaSpendDashboard() {
               )}
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
             {/* Language switcher — pill toggle EN | 中文 */}
             <div className="flex items-center gap-0.5 p-0.5 rounded-lg glass">
               <button
                 onClick={() => setLang("en")}
-                className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                className={`px-2 md:px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                   lang === "en" ? "bg-cyan-500/25 text-cyan-200" : "text-slate-500 hover:text-slate-200"
                 }`}
                 title="English"
               >EN</button>
               <button
                 onClick={() => setLang("zh")}
-                className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                className={`px-2 md:px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                   lang === "zh" ? "bg-cyan-500/25 text-cyan-200" : "text-slate-500 hover:text-slate-200"
                 }`}
                 title="简体中文"
               >中文</button>
             </div>
-            <button onClick={loadAll} className="flex items-center gap-2 px-3 py-2.5 rounded-lg glass glass-hover text-sm text-slate-300" title={t("Refresh")}><RefreshCw className="w-4 h-4" /></button>
-            <button onClick={exportCSV} disabled={entries.length === 0 && deposits.length === 0} className="flex items-center gap-2 px-4 py-2.5 rounded-lg glass glass-hover text-sm text-slate-200 disabled:opacity-40">
+            <button onClick={loadAll} className="flex items-center gap-2 px-2.5 md:px-3 py-2 md:py-2.5 rounded-lg glass glass-hover text-sm text-slate-300" title={t("Refresh")}><RefreshCw className="w-4 h-4" /></button>
+            <button onClick={exportCSV} disabled={entries.length === 0 && deposits.length === 0} className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg glass glass-hover text-sm text-slate-200 disabled:opacity-40">
               <Download className="w-4 h-4" /><span className="hidden md:inline">{t("Export")}</span>
             </button>
             {isAdmin && (
-              <button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-violet-500/20 border border-violet-500/40 text-violet-300 text-sm font-medium hover:bg-violet-500/30">
+              <button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg bg-violet-500/20 border border-violet-500/40 text-violet-300 text-sm font-medium hover:bg-violet-500/30">
                 <Upload className="w-4 h-4" /><span className="hidden md:inline">{t("Import")}</span>
               </button>
             )}
             {isAdmin && (
-              <button onClick={() => setShowDeleteModal(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-pink-500/15 border border-pink-500/30 text-pink-300 text-sm font-medium hover:bg-pink-500/25">
+              <button onClick={() => setShowDeleteModal(true)} className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg bg-pink-500/15 border border-pink-500/30 text-pink-300 text-sm font-medium hover:bg-pink-500/25">
                 <Trash2 className="w-4 h-4" /><span className="hidden md:inline">{t("Bulk delete")}</span>
               </button>
             )}
             {isAdmin ? (
-              <button onClick={exitAdmin} className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-sm font-medium hover:bg-cyan-500/30">
+              <button onClick={exitAdmin} className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-sm font-medium hover:bg-cyan-500/30">
                 <LogOut className="w-4 h-4" /><span className="hidden md:inline">{lang === "zh" ? "退出管理员" : "Exit Admin"}</span>
               </button>
             ) : (
-              <button onClick={openAdminModal} className="flex items-center gap-2 px-4 py-2.5 rounded-lg glass glass-hover text-sm text-slate-300">
+              <button onClick={openAdminModal} className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg glass glass-hover text-sm text-slate-300">
                 <Lock className="w-4 h-4" /><span className="hidden md:inline">{t("Admin")}</span>
               </button>
             )}
@@ -1397,9 +1397,9 @@ export default function MetaSpendDashboard() {
               <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(34,211,238,0.18), transparent 70%)" }} />
               <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(167,139,250,0.10), transparent 70%)" }} />
 
-              {/* Period switcher tabs */}
-              <div className="relative px-5 md:px-6 pt-4 pb-0 flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mr-2">{t("Showing:")}</span>
+              {/* Period switcher tabs — scrollable on mobile to fit all 6 options */}
+              <div className="relative px-3 md:px-6 pt-4 pb-0 flex items-center gap-1.5 overflow-x-auto scroll-x flex-nowrap">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mr-1 shrink-0">{t("Showing:")}</span>
                 {[
                   { key: "today", label: t("Today") },
                   { key: "yesterday", label: t("Yesterday") },
@@ -1411,7 +1411,7 @@ export default function MetaSpendDashboard() {
                   <button
                     key={p.key}
                     onClick={() => setHeroPeriod(p.key)}
-                    className={`px-3 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    className={`shrink-0 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all whitespace-nowrap ${
                       heroPeriod === p.key
                         ? "bg-cyan-500/20 text-cyan-300 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.4)]"
                         : "text-slate-500 hover:text-slate-200 hover:bg-slate-800/40"
@@ -1422,36 +1422,95 @@ export default function MetaSpendDashboard() {
                 ))}
               </div>
 
-              <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-0">
-                {/* Hero spend */}
-                <div className="lg:col-span-4 p-6 md:p-7 lg:border-r lg:border-slate-800/60">
-                  <div className="text-[10px] uppercase tracking-[0.25em] text-cyan-400/80 mb-2 flex items-center gap-1.5">
-                    <Activity className="w-3 h-3" /> {active.label}
+              <div className="relative">
+                {/* Top row: Hero spend (2/3) + Period Detail or Daily Target (1/3) */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                  <div className="lg:col-span-2 p-4 md:p-7 lg:border-r lg:border-slate-800/60">
+                    <div className="text-[10px] uppercase tracking-[0.25em] text-cyan-400/80 mb-2 flex items-center gap-1.5">
+                      <Activity className="w-3 h-3" /> {active.label}
+                    </div>
+                    <div className="font-mono-num text-3xl sm:text-4xl md:text-5xl lg:text-5xl xl:text-6xl font-extrabold text-white leading-none mb-3 truncate">
+                      {formatUSD(active.data.spend)}
+                    </div>
+                    {showDayCompare ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {stats.dod !== null && !isNaN(stats.dod) ? (
+                          <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${stats.dod >= 0 ? "bg-emerald-500/15 text-emerald-300" : "bg-pink-500/15 text-pink-300"}`}>
+                            {stats.dod >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                            <span className="font-mono-num">{stats.dod >= 0 ? "+" : ""}{stats.dod.toFixed(1)}%</span>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-600">—</span>
+                        )}
+                        <span className="text-[11px] text-slate-500 font-mono-num">{active.compareLabel}</span>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-slate-500 font-mono-num">
+                        {active.data.tax > 0 && `Incl. ${formatUSDCompact(active.data.tax)} tax`}
+                      </div>
+                    )}
                   </div>
-                  <div className="font-mono-num text-3xl sm:text-4xl md:text-5xl lg:text-5xl xl:text-6xl font-extrabold text-white leading-none mb-3 truncate">
-                    {formatUSD(active.data.spend)}
-                  </div>
-                  {showDayCompare ? (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {stats.dod !== null && !isNaN(stats.dod) ? (
-                        <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${stats.dod >= 0 ? "bg-emerald-500/15 text-emerald-300" : "bg-pink-500/15 text-pink-300"}`}>
-                          {stats.dod >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                          <span className="font-mono-num">{stats.dod >= 0 ? "+" : ""}{stats.dod.toFixed(1)}%</span>
+
+                  {/* Right column: Daily target (today) OR period-specific extra info */}
+                  <div className="lg:col-span-1 p-4 md:p-7 border-t lg:border-t-0 border-slate-800/60">
+                    {showTargetPacing ? (
+                      <>
+                        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-2 flex items-center gap-1.5">
+                          <Target className="w-3 h-3" /> {t("Daily Target")}
                         </div>
-                      ) : (
-                        <span className="text-[11px] text-slate-600">—</span>
-                      )}
-                      <span className="text-[11px] text-slate-500 font-mono-num">{active.compareLabel}</span>
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-slate-500 font-mono-num">
-                      {active.data.tax > 0 && `Incl. ${formatUSDCompact(active.data.tax)} tax`}
-                    </div>
-                  )}
+                        <div className="flex items-baseline gap-2 mb-2">
+                          <span className="font-mono-num text-xl font-bold text-white">{formatUSDCompact(active.data.spend)}</span>
+                          <span className="text-slate-500 font-mono-num text-xs">/ {formatUSDCompact(config.dailyBudget)}</span>
+                        </div>
+                        <div className="h-1.5 bg-slate-800/60 rounded-full overflow-hidden mb-2">
+                          <div
+                            className="h-full rounded-full transition-all duration-700"
+                            style={{
+                              width: `${Math.min(budgetPct, 100)}%`,
+                              background: budgetStatus === "over" ? "#f472b6" : budgetStatus === "on" ? "#facc15" : "#22d3ee",
+                              boxShadow: `0 0 12px ${budgetStatus === "over" ? "#f472b680" : budgetStatus === "on" ? "#facc1580" : "#22d3ee80"}`,
+                            }}
+                          />
+                        </div>
+                        <div className={`text-[11px] font-medium flex items-center gap-1 ${budgetStatus === "over" ? "text-pink-400" : budgetStatus === "on" ? "text-amber-400" : "text-cyan-400"}`}>
+                          <span className="w-1 h-1 rounded-full" style={{ background: "currentColor" }} />
+                          {budgetStatus === "over" ? `${(budgetPct - 100).toFixed(0)}% over` : budgetStatus === "on" ? "On pace" : `${(100 - budgetPct).toFixed(0)}% under`}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-2 flex items-center gap-1.5">
+                          <Activity className="w-3 h-3" /> {t("Period Detail")}
+                        </div>
+                        <div className="space-y-1.5 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">{t("Impressions")}</span>
+                            <span className="font-mono-num text-slate-200">{active.data.impressions ? formatNumCompact(active.data.impressions) : "—"}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">{t("Clicks")}</span>
+                            <span className="font-mono-num text-slate-200">{active.data.clicks ? formatNumCompact(active.data.clicks) : "—"}</span>
+                          </div>
+                          {active.data.l2d != null && (
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">{t("Lead → Dep")}</span>
+                              <span className="font-mono-num text-slate-200">{formatPct(active.data.l2d)}</span>
+                            </div>
+                          )}
+                          {active.data.tax > 0 && (
+                            <div className="flex justify-between border-t border-slate-800/60 pt-1.5 mt-1.5">
+                              <span className="text-slate-500">{t("Tax incl.")}</span>
+                              <span className="font-mono-num text-amber-300">{formatUSDCompact(active.data.tax)}</span>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                {/* Secondary metrics — 5 columns to give Deposit Amount its own tile */}
-                <div className="lg:col-span-5 grid grid-cols-2 lg:grid-cols-5 border-t lg:border-t-0 border-slate-800/60">
+                {/* Bottom row: 5 metric tiles spanning full width */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 border-t border-slate-800/60">
                   <HeroStat label={t("Leads")} value={formatNumCompact(active.data.leads)} icon={<Users className="w-3 h-3" />} accent="emerald" />
                   <HeroStat label={t("Deposits")} value={formatNumCompact(active.data.deposits)} icon={<Banknote className="w-3 h-3" />} accent="amber" />
                   <HeroStat
@@ -1463,63 +1522,6 @@ export default function MetaSpendDashboard() {
                   />
                   <HeroStat label={t("CPL")} value={active.data.cpl != null ? formatUSDCompact(active.data.cpl) : "—"} icon={<Target className="w-3 h-3" />} accent="violet" />
                   <HeroStat label={t("CPD")} value={active.data.cpd != null ? formatUSDCompact(active.data.cpd) : "—"} icon={<Wallet className="w-3 h-3" />} accent="cyan" />
-                </div>
-
-                {/* Right column: Daily target (today) OR period-specific extra info */}
-                <div className="lg:col-span-3 p-6 md:p-7 border-t lg:border-t-0 lg:border-l border-slate-800/60">
-                  {showTargetPacing ? (
-                    <>
-                      <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-2 flex items-center gap-1.5">
-                        <Target className="w-3 h-3" /> {t("Daily Target")}
-                      </div>
-                      <div className="flex items-baseline gap-2 mb-2">
-                        <span className="font-mono-num text-xl font-bold text-white">{formatUSDCompact(active.data.spend)}</span>
-                        <span className="text-slate-500 font-mono-num text-xs">/ {formatUSDCompact(config.dailyBudget)}</span>
-                      </div>
-                      <div className="h-1.5 bg-slate-800/60 rounded-full overflow-hidden mb-2">
-                        <div
-                          className="h-full rounded-full transition-all duration-700"
-                          style={{
-                            width: `${Math.min(budgetPct, 100)}%`,
-                            background: budgetStatus === "over" ? "#f472b6" : budgetStatus === "on" ? "#facc15" : "#22d3ee",
-                            boxShadow: `0 0 12px ${budgetStatus === "over" ? "#f472b680" : budgetStatus === "on" ? "#facc1580" : "#22d3ee80"}`,
-                          }}
-                        />
-                      </div>
-                      <div className={`text-[11px] font-medium flex items-center gap-1 ${budgetStatus === "over" ? "text-pink-400" : budgetStatus === "on" ? "text-amber-400" : "text-cyan-400"}`}>
-                        <span className="w-1 h-1 rounded-full" style={{ background: "currentColor" }} />
-                        {budgetStatus === "over" ? `${(budgetPct - 100).toFixed(0)}% over` : budgetStatus === "on" ? "On pace" : `${(100 - budgetPct).toFixed(0)}% under`}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-2 flex items-center gap-1.5">
-                        <Activity className="w-3 h-3" /> {t("Period Detail")}
-                      </div>
-                      <div className="space-y-1.5 text-xs">
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">{t("Impressions")}</span>
-                          <span className="font-mono-num text-slate-200">{active.data.impressions ? formatNumCompact(active.data.impressions) : "—"}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">{t("Clicks")}</span>
-                          <span className="font-mono-num text-slate-200">{active.data.clicks ? formatNumCompact(active.data.clicks) : "—"}</span>
-                        </div>
-                        {active.data.l2d != null && (
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">{t("Lead → Dep")}</span>
-                            <span className="font-mono-num text-slate-200">{formatPct(active.data.l2d)}</span>
-                          </div>
-                        )}
-                        {active.data.tax > 0 && (
-                          <div className="flex justify-between border-t border-slate-800/60 pt-1.5 mt-1.5">
-                            <span className="text-slate-500">{t("Tax incl.")}</span>
-                            <span className="font-mono-num text-amber-300">{formatUSDCompact(active.data.tax)}</span>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
                 </div>
               </div>
             </div>
@@ -1757,11 +1759,11 @@ export default function MetaSpendDashboard() {
         {/* Filters — sticky on scroll, designed for non-technical viewers
             to drill into data with one click. Includes view presets, custom
             date range picker, active-filter chips, and a quick search box. */}
-        <div className="sticky top-0 z-30 -mx-4 md:-mx-8 px-4 md:px-8 py-3 mb-5 backdrop-blur-xl bg-[#0a0e1a]/85 border-y border-slate-800/40 shadow-lg shadow-black/20">
+        <div className="sticky top-0 z-30 -mx-3 sm:-mx-4 md:-mx-8 px-3 sm:px-4 md:px-8 py-3 mb-5 backdrop-blur-xl bg-[#0a0e1a]/85 border-y border-slate-800/40 shadow-lg shadow-black/20">
           <div className="max-w-7xl mx-auto space-y-2.5">
 
             {/* Row 1: View presets — one-click answers to common questions */}
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex items-center gap-1.5 overflow-x-auto scroll-x flex-nowrap sm:flex-wrap">
               <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-slate-500 mr-1 shrink-0">
                 <Sparkles className="w-3 h-3" /> {t("Quick view")}
               </div>
@@ -1776,7 +1778,7 @@ export default function MetaSpendDashboard() {
                 <button
                   key={preset.label}
                   onClick={preset.onClick}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all whitespace-nowrap ${
+                  className={`shrink-0 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all whitespace-nowrap ${
                     preset.active
                       ? "bg-cyan-500/20 text-cyan-300 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.4)]"
                       : "bg-slate-900/40 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
