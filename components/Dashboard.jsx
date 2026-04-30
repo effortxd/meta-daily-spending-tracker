@@ -1121,7 +1121,12 @@ export default function MetaSpendDashboard() {
     }
 
     const totalLoaded = topupsScoped.reduce((s, t) => s + (t.amount || 0), 0);
-    const totalSpent = entriesScoped.reduce((s, e) => s + (e.amount || 0), 0);
+    // Apply tax rate so budget tracking matches the headline "All-time Spend"
+    // metric. Tax (e.g. Malaysia 7% SST) is a real cost coming out of the same
+    // pre-loaded budget pool, not something separate.
+    const taxRate = config.taxRate || 0;
+    const rawSpent = entriesScoped.reduce((s, e) => s + (e.amount || 0), 0);
+    const totalSpent = rawSpent * (1 + taxRate);
     const remaining = totalLoaded - totalSpent;
     const utilizationPct = totalLoaded > 0 ? (totalSpent / totalLoaded) * 100 : 0;
 
@@ -1133,7 +1138,8 @@ export default function MetaSpendDashboard() {
     });
     entriesScoped.forEach((e) => {
       if (!accountMap.has(e.account)) accountMap.set(e.account, { loaded: 0, spent: 0 });
-      accountMap.get(e.account).spent += e.amount || 0;
+      // Tax-included so per-account Spent matches the global Spent figure
+      accountMap.get(e.account).spent += (e.amount || 0) * (1 + taxRate);
     });
     const byAccount = Array.from(accountMap.entries())
       .map(([name, data]) => ({
@@ -1146,7 +1152,7 @@ export default function MetaSpendDashboard() {
       .sort((a, b) => b.loaded - a.loaded);
 
     return { totalLoaded, totalSpent, remaining, utilizationPct, byAccount };
-  }, [entries, topups, accountFilter, geoFilter]);
+  }, [entries, topups, accountFilter, geoFilter, config.taxRate]);
 
   const summaryStats = useMemo(() => {
     let entriesScoped = entries;
@@ -1645,6 +1651,7 @@ export default function MetaSpendDashboard() {
             </div>
             <p className="text-xs text-slate-500 mb-5">
               Total loaded vs spent across all time
+              {(config.taxRate || 0) > 0 && <span className="text-amber-400/70"> · Spent incl. {((config.taxRate || 0) * 100).toFixed(0)}% tax</span>}
               {accountFilter !== "all" || geoFilter !== "all"
                 ? ` · Filtered${accountFilter !== "all" ? ` to ${accountFilter}` : ""}${geoFilter !== "all" ? ` · ${geoFilter}` : ""}`
                 : ""}
