@@ -166,6 +166,35 @@ const COUNTRY_FLAGS = {
 
 const flagFor = (geo) => COUNTRY_FLAGS[geo] || "🏳️";
 
+// Reverse lookup: country name → 2-letter ISO code (e.g. "Thailand" → "TH").
+// Used to synthesize a fallback Source label for legacy deposit rows that
+// were imported before the source field was tracked. Falls back to first
+// 2 letters of the country name if no canonical code exists.
+const codeForGeo = (geo) => {
+  if (!geo) return "??";
+  const preferred = { Thailand: "TH", Indonesia: "ID", Vietnam: "VN", Philippines: "PH",
+    Malaysia: "MY", Singapore: "SG", Brazil: "BR", Mexico: "MX", Argentina: "AR",
+    Chile: "CL", Colombia: "CO", Peru: "PE", India: "IN", Japan: "JP",
+    "South Korea": "KR", China: "CN", "Hong Kong": "HK", Taiwan: "TW",
+    "United States": "US", Canada: "CA", "United Kingdom": "GB",
+    Australia: "AU", "New Zealand": "NZ", "Multi-country": "MULTI" };
+  if (preferred[geo]) return preferred[geo];
+  // Reverse lookup in COUNTRY_NORMALIZE for any other matches
+  for (const [code, name] of Object.entries(COUNTRY_NORMALIZE)) {
+    if (name === geo && code.length <= 3) return code;
+  }
+  return geo.slice(0, 2).toUpperCase();
+};
+
+// Display label for a deposit row's source. Returns the actual stored source
+// when present, or a synthesized fallback like "TH_*" so legacy rows aren't
+// shown as just "—". The asterisk signals "campaign details unknown".
+const displaySource = (d) => {
+  if (d?.source && String(d.source).trim()) return String(d.source).trim();
+  if (d?.geo) return `${codeForGeo(d.geo)}_*`;
+  return "";
+};
+
 // ===== I18N =====
 // English (default) and Simplified Chinese translations.
 // Keys are stable English strings; values are the localized output.
@@ -1391,15 +1420,16 @@ export default function MetaSpendDashboard() {
                   )}
                 </div>
 
-                {/* Secondary metrics */}
-                <div className="lg:col-span-5 grid grid-cols-2 lg:grid-cols-4 border-t lg:border-t-0 border-slate-800/60">
+                {/* Secondary metrics — 5 columns to give Deposit Amount its own tile */}
+                <div className="lg:col-span-5 grid grid-cols-2 lg:grid-cols-5 border-t lg:border-t-0 border-slate-800/60">
                   <HeroStat label={t("Leads")} value={formatNumCompact(active.data.leads)} icon={<Users className="w-3 h-3" />} accent="emerald" />
+                  <HeroStat label={t("Deposits")} value={formatNumCompact(active.data.deposits)} icon={<Banknote className="w-3 h-3" />} accent="amber" />
                   <HeroStat
-                    label={t("Deposits")}
-                    value={formatNumCompact(active.data.deposits)}
-                    sublabel={active.data.depositAmount > 0 ? formatUSDCompact(active.data.depositAmount) : null}
-                    icon={<Banknote className="w-3 h-3" />}
-                    accent="amber"
+                    label="Dep $"
+                    value={active.data.depositAmount > 0 ? formatUSDCompact(active.data.depositAmount) : "—"}
+                    sublabel={active.data.deposits > 0 && active.data.depositAmount > 0 ? `avg ${formatUSDCompact(active.data.depositAmount / active.data.deposits)}` : null}
+                    icon={<DollarSign className="w-3 h-3" />}
+                    accent="emerald"
                   />
                   <HeroStat label={t("CPL")} value={active.data.cpl != null ? formatUSDCompact(active.data.cpl) : "—"} icon={<Target className="w-3 h-3" />} accent="violet" />
                   <HeroStat label={t("CPD")} value={active.data.cpd != null ? formatUSDCompact(active.data.cpd) : "—"} icon={<Wallet className="w-3 h-3" />} accent="cyan" />
@@ -2409,8 +2439,8 @@ export default function MetaSpendDashboard() {
                         <td className="px-4 py-3 text-slate-200 text-xs">
                           <span className="mr-1.5">{flagFor(d.geo)}</span>{d.geo}
                         </td>
-                        <td className="px-4 py-3 text-slate-400 text-xs font-mono max-w-xs truncate" title={d.source || ""}>
-                          {d.source || <span className="text-slate-700">—</span>}
+                        <td className="px-4 py-3 text-slate-400 text-xs font-mono max-w-xs truncate" title={d.source || `Auto: ${displaySource(d)}`}>
+                          {d.source ? <span className="text-slate-300">{d.source}</span> : <span className="text-slate-600">{displaySource(d)}</span>}
                         </td>
                         <td className="px-4 py-3 text-right">
                           {isEditing ? (
