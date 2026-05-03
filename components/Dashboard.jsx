@@ -1175,12 +1175,26 @@ export default function MetaSpendDashboard() {
 
   // Generates a Meta-style PDF receipt. Heavy lifting lives in lib/meta-receipt.js
   // (extracted to keep Dashboard.jsx focused on dashboard concerns).
+  // Per-receipt identity overrides (from the modal) take priority over saved
+  // admin defaults (from config).
   const generateReceiptPDF = async (options) => {
     const { generateMetaReceipt } = await import("../lib/meta-receipt");
+    const { receiptOverrides = {}, ...rest } = options;
+    // Build effective config: start with saved defaults, layer overrides on top
+    // (only non-empty overrides win — blank strings fall through to defaults)
+    const effectiveConfig = {
+      ...config,
+      ...(receiptOverrides.accountName && { receiptAccountName: receiptOverrides.accountName }),
+      ...(receiptOverrides.accountId && { receiptAccountId: receiptOverrides.accountId }),
+      ...(receiptOverrides.paymentMethod && { receiptPaymentMethod: receiptOverrides.paymentMethod }),
+      ...(receiptOverrides.reference && { receiptReference: receiptOverrides.reference }),
+      ...(receiptOverrides.transactionId && { receiptTransactionId: receiptOverrides.transactionId }),
+      ...(receiptOverrides.invoiceNo && { receiptInvoiceNo: receiptOverrides.invoiceNo }),
+    };
     await generateMetaReceipt({
       entries,
-      config,
-      ...options,
+      config: effectiveConfig,
+      ...rest,
     });
   };
 
@@ -3157,6 +3171,10 @@ export default function MetaSpendDashboard() {
           accounts={allAccounts}
           defaultAccount={accountFilter !== "all" ? accountFilter : (allAccounts[0] || "WeTrade SEA")}
           entries={entries}
+          config={config}
+          onSaveDefaults={isAdmin ? async (overrides) => {
+            await persistConfig({ ...config, ...overrides });
+          } : null}
         />
       )}
       {showDeleteModal && (
@@ -3860,7 +3878,7 @@ function ImportModal({ onClose, onImport }) {
 // ===== RECEIPT MODAL =====
 // Lets the user pick a date range, account, currency, and tax rate, then
 // generates a Meta-style PDF receipt covering all spend in the selected window.
-function ReceiptModal({ onClose, onGenerate, accounts, defaultAccount, entries }) {
+function ReceiptModal({ onClose, onGenerate, accounts, defaultAccount, entries, config, onSaveDefaults }) {
   // Default range: last 14 days (matches Meta's typical billing window)
   const today = new Date();
   const fourteenAgo = new Date(today);
@@ -3874,6 +3892,21 @@ function ReceiptModal({ onClose, onGenerate, accounts, defaultAccount, entries }
   const [exchangeRate, setExchangeRate] = useState("4.45"); // USD → MYR rough default
   const [taxRatePct, setTaxRatePct] = useState("8");
   const [busy, setBusy] = useState(false);
+
+  // Identity fields — pre-filled from saved admin defaults (config), but
+  // editable per-receipt so admin can override before generating.
+  const [showIdentityFields, setShowIdentityFields] = useState(false);
+  const [accountName, setAccountName] = useState(config?.receiptAccountName || "");
+  const [accountId, setAccountId] = useState(config?.receiptAccountId || "");
+  const [paymentMethod, setPaymentMethod] = useState(config?.receiptPaymentMethod || "");
+  const [reference, setReference] = useState(config?.receiptReference || "");
+  const [transactionId, setTransactionId] = useState(config?.receiptTransactionId || "");
+  const [invoiceNo, setInvoiceNo] = useState(config?.receiptInvoiceNo || "");
+
+  // Auto-generate placeholders for blank fields so user sees what will be used
+  const generateRandomRef = () => Math.random().toString(36).slice(2, 12).toUpperCase();
+  const generateRandomTxn = () => `${Date.now()}${Math.floor(Math.random() * 1e16)}`.slice(0, 35);
+  const generateRandomInvoice = () => `FBADS-${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 900000000) + 100000000}`;
 
   // Compute preview totals so user knows what they'll get before generating
   const preview = (() => {
@@ -3905,6 +3938,15 @@ function ReceiptModal({ onClose, onGenerate, accounts, defaultAccount, entries }
         startDate, endDate, accountFilter: account, currency,
         exchangeRate: currency === "MYR" ? (parseFloat(exchangeRate) || 1) : 1,
         taxRatePct: parseFloat(taxRatePct) || 0,
+        // Per-receipt identity overrides — fall back to config defaults if blank
+        receiptOverrides: {
+          accountName: accountName.trim(),
+          accountId: accountId.trim(),
+          paymentMethod: paymentMethod.trim(),
+          reference: reference.trim(),
+          transactionId: transactionId.trim(),
+          invoiceNo: invoiceNo.trim(),
+        },
       });
       onClose();
     } catch (err) {
@@ -3912,6 +3954,19 @@ function ReceiptModal({ onClose, onGenerate, accounts, defaultAccount, entries }
     } finally {
       setBusy(false);
     }
+  };
+
+  // Save current modal values back to admin defaults so they persist
+  const handleSaveDefaults = async () => {
+    if (!onSaveDefaults) return;
+    await onSaveDefaults({
+      receiptAccountName: accountName.trim(),
+      receiptAccountId: accountId.trim(),
+      receiptPaymentMethod: paymentMethod.trim(),
+      receiptReference: reference.trim(),
+      receiptTransactionId: transactionId.trim(),
+      receiptInvoiceNo: invoiceNo.trim(),
+    });
   };
 
   return (
@@ -4029,6 +4084,133 @@ function ReceiptModal({ onClose, onGenerate, accounts, defaultAccount, entries }
                 className="input-base font-mono-num"
               />
             </div>
+          </div>
+
+          {/* Receipt identity fields — collapsible. Pre-filled from saved
+              admin defaults (config). Editable per-receipt for one-off overrides. */}
+          <div className="border border-slate-800/60 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setShowIdentityFields((v) => !v)}
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-800/40 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-amber-400" />
+                <span className="text-sm font-medium text-slate-200">Receipt details</span>
+                <span className="text-[11px] text-slate-500">
+                  {showIdentityFields ? "(click to collapse)" : "(click to edit account info, payment method, etc.)"}
+                </span>
+              </div>
+              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showIdentityFields ? "rotate-180" : ""}`} />
+            </button>
+
+            {showIdentityFields && (
+              <div className="px-4 py-4 border-t border-slate-800/60 bg-slate-900/30 space-y-3">
+                <p className="text-[11px] text-slate-500">
+                  Override receipt fields for this PDF only. Blank fields use auto-generated values.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-slate-400 mb-1 block">Account Name</label>
+                    <input
+                      type="text"
+                      value={accountName}
+                      onChange={(e) => setAccountName(e.target.value)}
+                      placeholder="e.g. we trade 1"
+                      className="input-base text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-slate-400 mb-1 block">Account ID</label>
+                    <input
+                      type="text"
+                      value={accountId}
+                      onChange={(e) => setAccountId(e.target.value)}
+                      placeholder="e.g. 317689061347612"
+                      className="input-base text-sm font-mono-num"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-[11px] uppercase tracking-wider text-slate-400 mb-1 block">Payment Method</label>
+                    <input
+                      type="text"
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      placeholder="e.g. MasterCard ···· 9313"
+                      className="input-base text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-slate-400 mb-1 flex items-center justify-between">
+                      <span>Reference Number</span>
+                      <button
+                        onClick={() => setReference(generateRandomRef())}
+                        className="text-cyan-400 hover:text-cyan-300 text-[10px] font-normal normal-case tracking-normal"
+                      >
+                        ↻ random
+                      </button>
+                    </label>
+                    <input
+                      type="text"
+                      value={reference}
+                      onChange={(e) => setReference(e.target.value)}
+                      placeholder="Auto if blank"
+                      className="input-base text-sm font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-slate-400 mb-1 flex items-center justify-between">
+                      <span>Transaction ID</span>
+                      <button
+                        onClick={() => setTransactionId(generateRandomTxn())}
+                        className="text-cyan-400 hover:text-cyan-300 text-[10px] font-normal normal-case tracking-normal"
+                      >
+                        ↻ random
+                      </button>
+                    </label>
+                    <input
+                      type="text"
+                      value={transactionId}
+                      onChange={(e) => setTransactionId(e.target.value)}
+                      placeholder="Auto if blank"
+                      className="input-base text-sm font-mono-num"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-[11px] uppercase tracking-wider text-slate-400 mb-1 flex items-center justify-between">
+                      <span>Invoice Number</span>
+                      <button
+                        onClick={() => setInvoiceNo(generateRandomInvoice())}
+                        className="text-cyan-400 hover:text-cyan-300 text-[10px] font-normal normal-case tracking-normal"
+                      >
+                        ↻ random
+                      </button>
+                    </label>
+                    <input
+                      type="text"
+                      value={invoiceNo}
+                      onChange={(e) => setInvoiceNo(e.target.value)}
+                      placeholder="e.g. FBADS-413-105786618"
+                      className="input-base text-sm font-mono"
+                    />
+                  </div>
+                </div>
+
+                {onSaveDefaults && (
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-800/40 mt-2">
+                    <p className="text-[11px] text-slate-500">
+                      Want to use these for every receipt?
+                    </p>
+                    <button
+                      onClick={handleSaveDefaults}
+                      className="text-[11px] px-3 py-1.5 rounded-md bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-medium"
+                    >
+                      Save as default
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Preview */}
