@@ -3,7 +3,7 @@ import {
   Plus, Trash2, Pencil, Download, Upload, TrendingUp, TrendingDown,
   Calendar, X, Check, Filter, DollarSign, Lock, LogOut, Target,
   Activity, RefreshCw, Globe, MousePointerClick, Eye, Users,
-  ChevronDown, ClipboardPaste, FileSpreadsheet, ImageIcon, Sparkles,
+  ChevronDown, ClipboardPaste, FileSpreadsheet, FileText, ImageIcon, Sparkles,
   AlertCircle, Wallet, Banknote,
 } from "lucide-react";
 import {
@@ -702,6 +702,13 @@ export default function MetaSpendDashboard() {
 
   const [budgetInput, setBudgetInput] = useState("");
   const [taxInput, setTaxInput] = useState("7");
+  // Meta Receipt identity fields — populated from config on load, edited in admin panel
+  const [receiptAccountName, setReceiptAccountName] = useState("");
+  const [receiptAccountId, setReceiptAccountId] = useState("");
+  const [receiptPaymentMethod, setReceiptPaymentMethod] = useState("");
+  const [receiptReference, setReceiptReference] = useState("");
+  const [receiptTransactionId, setReceiptTransactionId] = useState("");
+  const [receiptInvoiceNo, setReceiptInvoiceNo] = useState("");
 
   // Filters
   const [rangeFilter, setRangeFilter] = useState("30");
@@ -738,6 +745,13 @@ export default function MetaSpendDashboard() {
         setConfig(parsed);
         setBudgetInput(parsed.dailyBudget ? String(parsed.dailyBudget) : "");
         setTaxInput(parsed.taxRate != null ? String((parsed.taxRate * 100).toFixed(2).replace(/\.?0+$/, "")) : "7");
+        // Receipt identity fields — used when generating PDF receipts
+        setReceiptAccountName(parsed.receiptAccountName || "");
+        setReceiptAccountId(parsed.receiptAccountId || "");
+        setReceiptPaymentMethod(parsed.receiptPaymentMethod || "");
+        setReceiptReference(parsed.receiptReference || "");
+        setReceiptTransactionId(parsed.receiptTransactionId || "");
+        setReceiptInvoiceNo(parsed.receiptInvoiceNo || "");
       }
     } catch (err) {
       // ignore
@@ -1012,6 +1026,20 @@ export default function MetaSpendDashboard() {
     await persistConfig({ ...config, taxRate: v / 100 });
   };
 
+  // Save Meta Receipt identity fields. These persist in config and get
+  // baked into every PDF receipt the user generates afterwards.
+  const saveReceiptSettings = async () => {
+    await persistConfig({
+      ...config,
+      receiptAccountName: receiptAccountName.trim(),
+      receiptAccountId: receiptAccountId.trim(),
+      receiptPaymentMethod: receiptPaymentMethod.trim(),
+      receiptReference: receiptReference.trim(),
+      receiptTransactionId: receiptTransactionId.trim(),
+      receiptInvoiceNo: receiptInvoiceNo.trim(),
+    });
+  };
+
   // Bulk import
   const handleBulkImport = async (data, dataType, options = {}) => {
     const { skipDuplicates = true } = options;
@@ -1144,6 +1172,37 @@ export default function MetaSpendDashboard() {
     a.href = url; a.download = `meta-spend-${todayISO()}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
+
+  // Generates a Meta-style PDF receipt. Heavy lifting lives in lib/meta-receipt.js
+  // (extracted to keep Dashboard.jsx focused on dashboard concerns).
+  const generateReceiptPDF = async (options) => {
+    const { generateMetaReceipt } = await import("../lib/meta-receipt");
+    await generateMetaReceipt({
+      entries,
+      config,
+      ...options,
+    });
+  };
+
+  // Receipt modal state
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  // Export dropdown menu state — click outside to dismiss
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const onDocClick = (e) => {
+      if (!e.target.closest("[data-export-menu]")) setShowExportMenu(false);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [showExportMenu]);
+
+  // Date formatters used by the PDF for human-readable headers
+  const formatReceiptDate = (iso) => {
+    const d = new Date(iso + "T00:00:00");
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  };
+  const formatReceiptDateLong = formatReceiptDate;
 
   const allAccounts = useMemo(
     () => Array.from(new Set(entries.map((e) => e.account).filter(Boolean))),
@@ -1470,9 +1529,42 @@ export default function MetaSpendDashboard() {
               >中文</button>
             </div>
             <button onClick={loadAll} className="flex items-center gap-2 px-2.5 md:px-3 py-2 md:py-2.5 rounded-lg glass glass-hover text-sm text-slate-300" title={t("Refresh")}><RefreshCw className="w-4 h-4" /></button>
-            <button onClick={exportCSV} disabled={entries.length === 0 && deposits.length === 0} className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg glass glass-hover text-sm text-slate-200 disabled:opacity-40">
-              <Download className="w-4 h-4" /><span className="hidden md:inline">{t("Export")}</span>
-            </button>
+            {/* Export dropdown — CSV (raw data) and Receipt PDF (Meta-style invoice) */}
+            <div className="relative" data-export-menu>
+              <button
+                onClick={() => setShowExportMenu((v) => !v)}
+                disabled={entries.length === 0 && deposits.length === 0}
+                className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg glass glass-hover text-sm text-slate-200 disabled:opacity-40"
+              >
+                <Download className="w-4 h-4" /><span className="hidden md:inline">{t("Export")}</span>
+                <ChevronDown className="w-3 h-3 hidden md:inline" />
+              </button>
+              {showExportMenu && (
+                <div className="absolute right-0 mt-2 w-56 rounded-lg glass border border-slate-700/60 shadow-xl shadow-black/40 z-50 overflow-hidden">
+                  <button
+                    onClick={() => { exportCSV(); setShowExportMenu(false); }}
+                    className="w-full text-left px-4 py-3 hover:bg-slate-800/60 transition-colors flex items-start gap-3"
+                  >
+                    <Download className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-sm text-slate-200 font-medium">CSV Export</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">Raw data for spreadsheets</div>
+                    </div>
+                  </button>
+                  <div className="border-t border-slate-800/60" />
+                  <button
+                    onClick={() => { setShowReceiptModal(true); setShowExportMenu(false); }}
+                    className="w-full text-left px-4 py-3 hover:bg-slate-800/60 transition-colors flex items-start gap-3"
+                  >
+                    <FileText className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-sm text-slate-200 font-medium">Meta Receipt PDF</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">Invoice-style summary by campaign</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
             {isAdmin && (
               <button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg bg-violet-500/20 border border-violet-500/40 text-violet-300 text-sm font-medium hover:bg-violet-500/30">
                 <Upload className="w-4 h-4" /><span className="hidden md:inline">{t("Import")}</span>
@@ -2257,6 +2349,85 @@ export default function MetaSpendDashboard() {
                   Currently {((config.taxRate || 0) * 100).toFixed(0)}% · Applied to all displayed spend, CPL, CPC, CPM, CPD
                 </p>
               </div>
+
+              {/* Meta Receipt identity fields — used when generating PDF receipts */}
+              <div className="border-t border-slate-800/40 pt-5 mt-1">
+                <div className="flex items-center gap-2 mb-3">
+                  <FileText className="w-4 h-4 text-amber-400" />
+                  <h3 className="text-sm font-semibold text-white">Meta Receipt Settings</h3>
+                </div>
+                <p className="text-[11px] text-slate-500 mb-4">
+                  These fields appear on every PDF receipt you generate. Set them once.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-slate-400 mb-1 block">Account Name</label>
+                    <input
+                      type="text"
+                      value={receiptAccountName}
+                      onChange={(e) => setReceiptAccountName(e.target.value)}
+                      placeholder="e.g. we trade 1"
+                      className="input-base text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-slate-400 mb-1 block">Account ID</label>
+                    <input
+                      type="text"
+                      value={receiptAccountId}
+                      onChange={(e) => setReceiptAccountId(e.target.value)}
+                      placeholder="e.g. 317689061347612"
+                      className="input-base text-sm font-mono-num"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-slate-400 mb-1 block">Payment Method</label>
+                    <input
+                      type="text"
+                      value={receiptPaymentMethod}
+                      onChange={(e) => setReceiptPaymentMethod(e.target.value)}
+                      placeholder="e.g. MasterCard ···· 9313"
+                      className="input-base text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-slate-400 mb-1 block">Reference Number</label>
+                    <input
+                      type="text"
+                      value={receiptReference}
+                      onChange={(e) => setReceiptReference(e.target.value)}
+                      placeholder="e.g. XBYA4ND5J2 (or leave blank to auto-generate)"
+                      className="input-base text-sm font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-slate-400 mb-1 block">Transaction ID</label>
+                    <input
+                      type="text"
+                      value={receiptTransactionId}
+                      onChange={(e) => setReceiptTransactionId(e.target.value)}
+                      placeholder="Auto if blank"
+                      className="input-base text-sm font-mono-num"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-slate-400 mb-1 block">Invoice Number</label>
+                    <input
+                      type="text"
+                      value={receiptInvoiceNo}
+                      onChange={(e) => setReceiptInvoiceNo(e.target.value)}
+                      placeholder="e.g. FBADS-413-105786618 (or auto)"
+                      className="input-base text-sm font-mono"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={saveReceiptSettings}
+                  className="mt-3 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-semibold flex items-center gap-2"
+                >
+                  <Check className="w-4 h-4" /> Save Receipt Settings
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -2979,6 +3150,15 @@ export default function MetaSpendDashboard() {
       )}
 
       {showImportModal && <ImportModal onClose={() => setShowImportModal(false)} onImport={handleBulkImport} />}
+      {showReceiptModal && (
+        <ReceiptModal
+          onClose={() => setShowReceiptModal(false)}
+          onGenerate={generateReceiptPDF}
+          accounts={allAccounts}
+          defaultAccount={accountFilter !== "all" ? accountFilter : (allAccounts[0] || "WeTrade SEA")}
+          entries={entries}
+        />
+      )}
       {showDeleteModal && (
         <DeleteModal
           onClose={() => setShowDeleteModal(false)}
@@ -3671,6 +3851,235 @@ function ImportModal({ onClose, onImport }) {
               </div>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== RECEIPT MODAL =====
+// Lets the user pick a date range, account, currency, and tax rate, then
+// generates a Meta-style PDF receipt covering all spend in the selected window.
+function ReceiptModal({ onClose, onGenerate, accounts, defaultAccount, entries }) {
+  // Default range: last 14 days (matches Meta's typical billing window)
+  const today = new Date();
+  const fourteenAgo = new Date(today);
+  fourteenAgo.setDate(today.getDate() - 14);
+  const isoDate = (d) => d.toISOString().slice(0, 10);
+
+  const [startDate, setStartDate] = useState(isoDate(fourteenAgo));
+  const [endDate, setEndDate] = useState(isoDate(today));
+  const [account, setAccount] = useState(defaultAccount);
+  const [currency, setCurrency] = useState("MYR");
+  const [exchangeRate, setExchangeRate] = useState("4.45"); // USD → MYR rough default
+  const [taxRatePct, setTaxRatePct] = useState("8");
+  const [busy, setBusy] = useState(false);
+
+  // Compute preview totals so user knows what they'll get before generating
+  const preview = (() => {
+    const filtered = entries.filter((e) =>
+      e.date >= startDate && e.date <= endDate &&
+      (account === "all" || e.account === account)
+    );
+    const subtotal = filtered.reduce((s, e) => s + (e.amount || 0), 0);
+    const rate = currency === "MYR" ? (parseFloat(exchangeRate) || 1) : 1;
+    const taxAmount = subtotal * ((parseFloat(taxRatePct) || 0) / 100);
+    const total = subtotal + taxAmount;
+    const campaignCount = new Set(filtered.map((e) => e.campaign).filter(Boolean)).size;
+    return {
+      entryCount: filtered.length,
+      campaignCount,
+      subtotal: subtotal * rate,
+      taxAmount: taxAmount * rate,
+      total: total * rate,
+      symbol: currency,
+    };
+  })();
+
+  const fmt = (n) => `${preview.symbol} ${n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
+
+  const handleGenerate = async () => {
+    setBusy(true);
+    try {
+      await onGenerate({
+        startDate, endDate, accountFilter: account, currency,
+        exchangeRate: currency === "MYR" ? (parseFloat(exchangeRate) || 1) : 1,
+        taxRatePct: parseFloat(taxRatePct) || 0,
+      });
+      onClose();
+    } catch (err) {
+      alert("Failed to generate PDF: " + (err?.message || err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={onClose}>
+      <div className="glass rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-5 border-b border-slate-800/60 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-amber-500/15 flex items-center justify-center">
+              <FileText className="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <h3 className="font-display text-lg font-bold text-white">Generate Meta Receipt</h3>
+              <p className="text-xs text-slate-500 mt-0.5">PDF invoice in Meta's billing format</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded hover:bg-slate-800/60 text-slate-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* Date range */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs uppercase tracking-wider text-slate-400 mb-1.5 block">Start date</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                max={endDate}
+                className="input-base"
+              />
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-wider text-slate-400 mb-1.5 block">End date</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                min={startDate}
+                className="input-base"
+              />
+            </div>
+          </div>
+
+          {/* Quick range presets */}
+          <div className="flex gap-1.5 flex-wrap">
+            {[
+              { label: "Last 7d", days: 7 },
+              { label: "Last 14d", days: 14 },
+              { label: "Last 30d", days: 30 },
+              { label: "MTD", mtd: true },
+            ].map((p) => (
+              <button
+                key={p.label}
+                onClick={() => {
+                  const end = new Date();
+                  let start;
+                  if (p.mtd) {
+                    start = new Date(end.getFullYear(), end.getMonth(), 1);
+                  } else {
+                    start = new Date(end);
+                    start.setDate(end.getDate() - p.days);
+                  }
+                  setStartDate(isoDate(start));
+                  setEndDate(isoDate(end));
+                }}
+                className="px-3 py-1 rounded-md text-[11px] font-medium bg-slate-900/40 text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Account */}
+          <div>
+            <label className="text-xs uppercase tracking-wider text-slate-400 mb-1.5 block">Account</label>
+            <select value={account} onChange={(e) => setAccount(e.target.value)} className="input-base">
+              <option value="all">All accounts</option>
+              {accounts.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+
+          {/* Currency + tax */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs uppercase tracking-wider text-slate-400 mb-1.5 block">Currency</label>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="input-base">
+                <option value="MYR">MYR (Meta)</option>
+                <option value="USD">USD (raw)</option>
+              </select>
+            </div>
+            {currency === "MYR" && (
+              <div>
+                <label className="text-xs uppercase tracking-wider text-slate-400 mb-1.5 block">USD → MYR</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={exchangeRate}
+                  onChange={(e) => setExchangeRate(e.target.value)}
+                  placeholder="4.45"
+                  className="input-base font-mono-num"
+                />
+              </div>
+            )}
+            <div>
+              <label className="text-xs uppercase tracking-wider text-slate-400 mb-1.5 block">SST (%)</label>
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                value={taxRatePct}
+                onChange={(e) => setTaxRatePct(e.target.value)}
+                className="input-base font-mono-num"
+              />
+            </div>
+          </div>
+
+          {/* Preview */}
+          <div className="bg-slate-900/40 rounded-lg p-4 border border-slate-800/60">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-3">Receipt preview</div>
+            <div className="grid grid-cols-3 gap-3 text-center mb-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">Entries</div>
+                <div className="font-mono-num text-base font-semibold text-slate-200 mt-0.5">{preview.entryCount}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">Campaigns</div>
+                <div className="font-mono-num text-base font-semibold text-slate-200 mt-0.5">{preview.campaignCount}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">Total</div>
+                <div className="font-mono-num text-base font-semibold text-emerald-300 mt-0.5">{fmt(preview.total)}</div>
+              </div>
+            </div>
+            <div className="border-t border-slate-800/60 pt-2 mt-2 space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Subtotal</span>
+                <span className="font-mono-num text-slate-300">{fmt(preview.subtotal)}</span>
+              </div>
+              {preview.taxAmount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">SST ({taxRatePct}%)</span>
+                  <span className="font-mono-num text-amber-300">{fmt(preview.taxAmount)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {preview.entryCount === 0 && (
+            <div className="bg-pink-500/10 border border-pink-500/30 rounded-lg p-3 text-xs text-pink-300 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>No campaign entries fall in this date range. Adjust the dates or change the account filter.</span>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-800/60 flex items-center justify-end gap-2 bg-slate-900/40">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-slate-200">Cancel</button>
+          <button
+            onClick={handleGenerate}
+            disabled={busy || preview.entryCount === 0}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {busy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {busy ? "Generating..." : "Generate PDF"}
+          </button>
         </div>
       </div>
     </div>
