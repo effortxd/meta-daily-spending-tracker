@@ -642,6 +642,9 @@ export default function MetaSpendDashboard() {
   const [editDepCrmId, setEditDepCrmId] = useState("");
   // Bulk-reassign account UI state — lets admins fix all "Other"-account entries at once
   const [showBulkReassign, setShowBulkReassign] = useState(false);
+  // Campaign Entries table view window — defaults to 7 days so the table doesn't
+  // grow unbounded as data accumulates. User can expand to 30d or all.
+  const [entriesViewWindow, setEntriesViewWindow] = useState("7d"); // "7d" | "30d" | "all"
   const [bulkReassignTarget, setBulkReassignTarget] = useState("WeTrade SEA");
   const [showAdminPanels, setShowAdminPanels] = useState(false);
   // Hero strip period selector — lets bosses flip the top stat between
@@ -1257,6 +1260,20 @@ export default function MetaSpendDashboard() {
     if (geoFilter !== "all") list = list.filter((e) => e.geo === geoFilter);
     return list.sort((a, b) => b.date.localeCompare(a.date));
   }, [entries, rangeFilter, accountFilter, campaignFilter, geoFilter, customStart, customEnd]);
+
+  // Campaign Entries table view — slice to the chosen rolling window.
+  // Keeps the table digestible by default (7d) while letting the user expand on demand.
+  // Hidden count is exposed so the UI can show "X more entries hidden" in the footer.
+  const visibleEntries = useMemo(() => {
+    if (entriesViewWindow === "all") return filteredEntries;
+    const days = entriesViewWindow === "30d" ? 30 : 7;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days + 1); // inclusive: today counts as day 1
+    cutoff.setHours(0, 0, 0, 0);
+    const cutoffISO = cutoff.toISOString().slice(0, 10);
+    return filteredEntries.filter((e) => e.date >= cutoffISO);
+  }, [filteredEntries, entriesViewWindow]);
+  const hiddenEntriesCount = filteredEntries.length - visibleEntries.length;
 
   // Filtered deposits — respects geo + range only (deposits aren't tied to accounts)
   const filteredDeposits = useMemo(() => {
@@ -2561,81 +2578,124 @@ export default function MetaSpendDashboard() {
             <div>
               <h2 className="font-display text-lg font-bold text-white">{t("Campaign Entries")}</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                {filteredEntries.length} {filteredEntries.length === 1 ? "entry" : "entries"}
+                {entriesViewWindow === "all" ? (
+                  <>{filteredEntries.length} {filteredEntries.length === 1 ? "entry" : "entries"}</>
+                ) : (
+                  <>
+                    Showing {visibleEntries.length} of {filteredEntries.length}
+                    {hiddenEntriesCount > 0 && <> · <span className="text-slate-400">{hiddenEntriesCount} older hidden</span></>}
+                  </>
+                )}
                 {(accountFilter !== "all" || campaignFilter !== "all" || geoFilter !== "all") && " · filtered"}
               </p>
             </div>
-            {isAdmin && filteredEntries.length > 0 && (
-              <div className="flex items-center gap-2">
-                {!showBulkReassign ? (
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* View window pills — 7d default, expand to 30d or all on demand */}
+              <div className="flex items-center gap-1 p-1 rounded-lg bg-slate-900/40 border border-slate-800/60">
+                {[
+                  { key: "7d", label: "7d" },
+                  { key: "30d", label: "30d" },
+                  { key: "all", label: "All" },
+                ].map((opt) => (
                   <button
-                    onClick={() => setShowBulkReassign(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 transition-colors"
-                    title="Set account on all currently-filtered entries"
+                    key={opt.key}
+                    onClick={() => setEntriesViewWindow(opt.key)}
+                    className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+                      entriesViewWindow === opt.key
+                        ? "bg-cyan-500/20 text-cyan-300"
+                        : "text-slate-500 hover:text-slate-300"
+                    }`}
                   >
-                    <Pencil className="w-3 h-3" /> {t("Bulk set account")}
+                    {opt.label}
                   </button>
-                ) : (
-                  <div className="flex items-center gap-1.5 p-1 rounded-md bg-cyan-500/10 border border-cyan-500/30">
-                    <span className="text-[10px] uppercase tracking-wider text-cyan-300/80 px-1.5">Set {filteredEntries.length} to:</span>
-                    <select
-                      value={bulkReassignTarget}
-                      onChange={(e) => setBulkReassignTarget(e.target.value)}
-                      className="px-2 py-1 rounded text-xs bg-slate-900/80 border border-slate-700/60 text-slate-200 focus:outline-none focus:border-cyan-500"
-                    >
-                      {DEFAULT_ACCOUNTS.map((a) => <option key={a} value={a}>{a}</option>)}
-                      {/* Include any non-default accounts already in use so users can target those too */}
-                      {allAccounts.filter((a) => !DEFAULT_ACCOUNTS.includes(a)).map((a) => (
-                        <option key={a} value={a}>{a}</option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => handleBulkReassignAccount(bulkReassignTarget)}
-                      className="px-2 py-1 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-semibold flex items-center gap-1"
-                    >
-                      <Check className="w-3 h-3" /> Apply
-                    </button>
-                    <button
-                      onClick={() => setShowBulkReassign(false)}
-                      className="px-2 py-1 rounded text-slate-400 hover:text-slate-200 text-xs"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
+                ))}
               </div>
-            )}
+              {isAdmin && filteredEntries.length > 0 && (
+                <>
+                  {!showBulkReassign ? (
+                    <button
+                      onClick={() => setShowBulkReassign(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 transition-colors"
+                      title="Set account on all currently-filtered entries"
+                    >
+                      <Pencil className="w-3 h-3" /> {t("Bulk set account")}
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5 p-1 rounded-md bg-cyan-500/10 border border-cyan-500/30">
+                      <span className="text-[10px] uppercase tracking-wider text-cyan-300/80 px-1.5">Set {filteredEntries.length} to:</span>
+                      <select
+                        value={bulkReassignTarget}
+                        onChange={(e) => setBulkReassignTarget(e.target.value)}
+                        className="px-2 py-1 rounded text-xs bg-slate-900/80 border border-slate-700/60 text-slate-200 focus:outline-none focus:border-cyan-500"
+                      >
+                        {DEFAULT_ACCOUNTS.map((a) => <option key={a} value={a}>{a}</option>)}
+                        {/* Include any non-default accounts already in use so users can target those too */}
+                        {allAccounts.filter((a) => !DEFAULT_ACCOUNTS.includes(a)).map((a) => (
+                          <option key={a} value={a}>{a}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => handleBulkReassignAccount(bulkReassignTarget)}
+                        className="px-2 py-1 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-semibold flex items-center gap-1"
+                      >
+                        <Check className="w-3 h-3" /> Apply
+                      </button>
+                      <button
+                        onClick={() => setShowBulkReassign(false)}
+                        className="px-2 py-1 rounded text-slate-400 hover:text-slate-200 text-xs"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           {filteredEntries.length === 0 ? (
             <div className="p-12 text-center">
               <Calendar className="w-10 h-10 mx-auto text-slate-700 mb-3" />
               <p className="text-slate-400 text-sm">{entries.length === 0 ? (isAdmin ? "No entries yet. Add daily data above or use Bulk Import." : "No data yet.") : "No entries match the current filter."}</p>
             </div>
+          ) : visibleEntries.length === 0 ? (
+            <div className="p-12 text-center">
+              <Calendar className="w-10 h-10 mx-auto text-slate-700 mb-3" />
+              <p className="text-slate-400 text-sm mb-3">No entries in the last {entriesViewWindow === "30d" ? "30" : "7"} days.</p>
+              <button
+                onClick={() => setEntriesViewWindow("all")}
+                className="text-xs px-3 py-1.5 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25"
+              >
+                Show all {filteredEntries.length} entries
+              </button>
+            </div>
           ) : (
             <>
               <div className="hidden md:block overflow-x-auto scroll-x">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm min-w-[1000px]">
                   <thead>
                     <tr className="text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800/60">
                       <th className="px-3 py-3 w-6"></th>
                       <th className="text-left px-4 py-3 font-medium">{t("Date")}</th>
+                      <th className="text-left px-4 py-3 font-medium">{t("Account")}</th>
                       <th className="text-left px-4 py-3 font-medium">{t("Campaign")}</th>
                       <th className="text-left px-4 py-3 font-medium">{t("Geo")}</th>
                       <th className="text-right px-4 py-3 font-medium">{t("Spend")}</th>
+                      <th className="text-right px-4 py-3 font-medium">{t("IMPR.")}</th>
+                      <th className="text-right px-4 py-3 font-medium">{t("Clicks")}</th>
                       <th className="text-right px-4 py-3 font-medium">{t("Leads")}</th>
+                      <th className="text-right px-4 py-3 font-medium">{t("CTR")}</th>
                       <th className="text-right px-4 py-3 font-medium">{t("CPL")}</th>
                       {isAdmin && <th className="px-4 py-3"></th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredEntries.map((e) => {
+                    {visibleEntries.map((e) => {
                       const taxedAmount = e.amount * (1 + (config.taxRate || 0));
+                      const ctr = e.impressions > 0 ? ((e.clicks || 0) / e.impressions) * 100 : null;
                       const cpl = e.leads > 0 ? taxedAmount / e.leads : null;
                       // Performance status dot — visual decision aid.
                       // Green = healthy CPL with leads. Yellow = leads but CPL high (or no leads but low spend).
                       // Red = significant spend with no leads (likely needs investigation/cut).
-                      // Thresholds use the configured CPL target (config.cplTarget) when available;
-                      // fall back to a reasonable default (~$15) so the dot still gives signal pre-config.
                       const cplTarget = config.cplTarget || 15;
                       let statusColor = "bg-slate-700"; // unknown / not enough data
                       if (e.leads > 0) {
@@ -2643,7 +2703,7 @@ export default function MetaSpendDashboard() {
                         else if (cpl != null && cpl <= cplTarget * 1.5) statusColor = "bg-amber-400";
                         else statusColor = "bg-rose-400";
                       } else if (taxedAmount >= 50) {
-                        statusColor = "bg-rose-400"; // spending without leads
+                        statusColor = "bg-rose-400";
                       } else if (taxedAmount > 0) {
                         statusColor = "bg-amber-400";
                       }
@@ -2653,14 +2713,18 @@ export default function MetaSpendDashboard() {
                             <span className={`inline-block w-2 h-2 rounded-full ${statusColor}`} title={`CPL ${cpl != null ? formatUSD(cpl) : "—"} vs target ${formatUSD(cplTarget)}`}></span>
                           </td>
                           <td className="px-4 py-3 text-slate-200 font-mono-num text-xs whitespace-nowrap">{formatDate(e.date)}</td>
-                          <td className="px-4 py-3 text-slate-300 text-xs max-w-[340px] truncate" title={e.campaign || ""}>
+                          <td className="px-4 py-3 text-slate-200 text-xs whitespace-nowrap">{e.account}</td>
+                          <td className="px-4 py-3 text-slate-400 text-xs max-w-[280px] truncate" title={e.campaign || ""}>
                             {e.campaign || <span className="text-slate-700">—</span>}
                           </td>
                           <td className="px-4 py-3 text-slate-300 text-xs whitespace-nowrap">
                             {e.geo ? <span><span className="mr-1">{flagFor(e.geo)}</span>{e.geo}</span> : "—"}
                           </td>
                           <td className="px-4 py-3 text-right font-mono-num text-slate-100 font-semibold text-xs">{formatUSD(taxedAmount)}</td>
+                          <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{e.impressions ? formatNumCompact(e.impressions) : "—"}</td>
+                          <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{e.clicks ? formatNumCompact(e.clicks) : "—"}</td>
                           <td className="px-4 py-3 text-right font-mono-num text-emerald-300 text-xs font-semibold">{e.leads ? formatNumCompact(e.leads) : "—"}</td>
+                          <td className="px-4 py-3 text-right font-mono-num text-slate-400 text-xs">{formatPct(ctr)}</td>
                           <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{cpl != null ? formatUSD(cpl) : "—"}</td>
                           {isAdmin && (
                             <td className="px-4 py-3"><div className="flex items-center justify-end gap-1">
@@ -2675,17 +2739,42 @@ export default function MetaSpendDashboard() {
                   <tfoot>
                     <tr className="bg-slate-900/40">
                       <td></td>
-                      <td colSpan={3} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400">Period total</td>
-                      <td className="px-4 py-3 text-right font-mono-num text-cyan-300 font-bold text-xs">{formatUSD(stats.total.spend)}</td>
-                      <td className="px-4 py-3 text-right font-mono-num text-emerald-300 font-bold text-xs">{formatNumCompact(stats.total.leads)}</td>
-                      <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{stats.total.cpl != null ? formatUSD(stats.total.cpl) : "—"}</td>
+                      <td colSpan={4} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400">
+                        {entriesViewWindow === "all" ? "Period total" : `Last ${entriesViewWindow === "30d" ? "30" : "7"} days total`}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono-num text-cyan-300 font-bold text-xs">
+                        {formatUSD(visibleEntries.reduce((s, e) => s + (e.amount || 0) * (1 + (config.taxRate || 0)), 0))}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
+                        {formatNumCompact(visibleEntries.reduce((s, e) => s + (e.impressions || 0), 0))}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
+                        {formatNumCompact(visibleEntries.reduce((s, e) => s + (e.clicks || 0), 0))}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono-num text-emerald-300 font-bold text-xs">
+                        {formatNumCompact(visibleEntries.reduce((s, e) => s + (e.leads || 0), 0))}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono-num text-slate-400 text-xs">
+                        {(() => {
+                          const totalImpr = visibleEntries.reduce((s, e) => s + (e.impressions || 0), 0);
+                          const totalClicks = visibleEntries.reduce((s, e) => s + (e.clicks || 0), 0);
+                          return formatPct(totalImpr > 0 ? (totalClicks / totalImpr) * 100 : null);
+                        })()}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
+                        {(() => {
+                          const totalSpendTaxed = visibleEntries.reduce((s, e) => s + (e.amount || 0) * (1 + (config.taxRate || 0)), 0);
+                          const totalLeads = visibleEntries.reduce((s, e) => s + (e.leads || 0), 0);
+                          return totalLeads > 0 ? formatUSD(totalSpendTaxed / totalLeads) : "—";
+                        })()}
+                      </td>
                       {isAdmin && <td></td>}
                     </tr>
                   </tfoot>
                 </table>
               </div>
               <div className="md:hidden divide-y divide-slate-800/40">
-                {filteredEntries.map((e) => {
+                {visibleEntries.map((e) => {
                   const taxedAmount = e.amount * (1 + (config.taxRate || 0));
                   const cpl = e.leads > 0 ? taxedAmount / e.leads : null;
                   return (
