@@ -2614,18 +2614,15 @@ export default function MetaSpendDashboard() {
           ) : (
             <>
               <div className="hidden md:block overflow-x-auto scroll-x">
-                <table className="w-full text-sm min-w-[900px]">
+                <table className="w-full text-sm">
                   <thead>
                     <tr className="text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800/60">
+                      <th className="px-3 py-3 w-6"></th>
                       <th className="text-left px-4 py-3 font-medium">{t("Date")}</th>
-                      <th className="text-left px-4 py-3 font-medium">{t("Account")}</th>
                       <th className="text-left px-4 py-3 font-medium">{t("Campaign")}</th>
                       <th className="text-left px-4 py-3 font-medium">{t("Geo")}</th>
                       <th className="text-right px-4 py-3 font-medium">{t("Spend")}</th>
-                      <th className="text-right px-4 py-3 font-medium">{t("IMPR.")}</th>
-                      <th className="text-right px-4 py-3 font-medium">{t("Clicks")}</th>
                       <th className="text-right px-4 py-3 font-medium">{t("Leads")}</th>
-                      <th className="text-right px-4 py-3 font-medium">{t("CTR")}</th>
                       <th className="text-right px-4 py-3 font-medium">{t("CPL")}</th>
                       {isAdmin && <th className="px-4 py-3"></th>}
                     </tr>
@@ -2633,23 +2630,37 @@ export default function MetaSpendDashboard() {
                   <tbody>
                     {filteredEntries.map((e) => {
                       const taxedAmount = e.amount * (1 + (config.taxRate || 0));
-                      const ctr = e.impressions > 0 ? ((e.clicks || 0) / e.impressions) * 100 : null;
                       const cpl = e.leads > 0 ? taxedAmount / e.leads : null;
+                      // Performance status dot — visual decision aid.
+                      // Green = healthy CPL with leads. Yellow = leads but CPL high (or no leads but low spend).
+                      // Red = significant spend with no leads (likely needs investigation/cut).
+                      // Thresholds use the configured CPL target (config.cplTarget) when available;
+                      // fall back to a reasonable default (~$15) so the dot still gives signal pre-config.
+                      const cplTarget = config.cplTarget || 15;
+                      let statusColor = "bg-slate-700"; // unknown / not enough data
+                      if (e.leads > 0) {
+                        if (cpl != null && cpl <= cplTarget) statusColor = "bg-emerald-400";
+                        else if (cpl != null && cpl <= cplTarget * 1.5) statusColor = "bg-amber-400";
+                        else statusColor = "bg-rose-400";
+                      } else if (taxedAmount >= 50) {
+                        statusColor = "bg-rose-400"; // spending without leads
+                      } else if (taxedAmount > 0) {
+                        statusColor = "bg-amber-400";
+                      }
                       return (
                         <tr key={e.id} className="border-b border-slate-800/40 hover:bg-slate-800/20">
+                          <td className="px-3 py-3">
+                            <span className={`inline-block w-2 h-2 rounded-full ${statusColor}`} title={`CPL ${cpl != null ? formatUSD(cpl) : "—"} vs target ${formatUSD(cplTarget)}`}></span>
+                          </td>
                           <td className="px-4 py-3 text-slate-200 font-mono-num text-xs whitespace-nowrap">{formatDate(e.date)}</td>
-                          <td className="px-4 py-3 text-slate-200 text-xs whitespace-nowrap">{e.account}</td>
-                          <td className="px-4 py-3 text-slate-400 text-xs max-w-[280px] truncate" title={e.campaign || ""}>
+                          <td className="px-4 py-3 text-slate-300 text-xs max-w-[340px] truncate" title={e.campaign || ""}>
                             {e.campaign || <span className="text-slate-700">—</span>}
                           </td>
                           <td className="px-4 py-3 text-slate-300 text-xs whitespace-nowrap">
                             {e.geo ? <span><span className="mr-1">{flagFor(e.geo)}</span>{e.geo}</span> : "—"}
                           </td>
                           <td className="px-4 py-3 text-right font-mono-num text-slate-100 font-semibold text-xs">{formatUSD(taxedAmount)}</td>
-                          <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{e.impressions ? formatNumCompact(e.impressions) : "—"}</td>
-                          <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{e.clicks ? formatNumCompact(e.clicks) : "—"}</td>
                           <td className="px-4 py-3 text-right font-mono-num text-emerald-300 text-xs font-semibold">{e.leads ? formatNumCompact(e.leads) : "—"}</td>
-                          <td className="px-4 py-3 text-right font-mono-num text-slate-400 text-xs">{formatPct(ctr)}</td>
                           <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{cpl != null ? formatUSD(cpl) : "—"}</td>
                           {isAdmin && (
                             <td className="px-4 py-3"><div className="flex items-center justify-end gap-1">
@@ -2663,12 +2674,10 @@ export default function MetaSpendDashboard() {
                   </tbody>
                   <tfoot>
                     <tr className="bg-slate-900/40">
-                      <td colSpan={4} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400">Period total</td>
+                      <td></td>
+                      <td colSpan={3} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400">Period total</td>
                       <td className="px-4 py-3 text-right font-mono-num text-cyan-300 font-bold text-xs">{formatUSD(stats.total.spend)}</td>
-                      <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{formatNumCompact(stats.total.impressions)}</td>
-                      <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{formatNumCompact(stats.total.clicks)}</td>
                       <td className="px-4 py-3 text-right font-mono-num text-emerald-300 font-bold text-xs">{formatNumCompact(stats.total.leads)}</td>
-                      <td className="px-4 py-3 text-right font-mono-num text-slate-400 text-xs">{formatPct(stats.total.ctr)}</td>
                       <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{stats.total.cpl != null ? formatUSD(stats.total.cpl) : "—"}</td>
                       {isAdmin && <td></td>}
                     </tr>
@@ -3777,7 +3786,7 @@ function ImportModal({ onClose, onImport }) {
                         ) : (
                           <>
                             {" · "}<span className="text-slate-200">{e.geo}</span>
-                            {" · "}<span className="text-amber-300">{formatNum(e.count)} {t("deposits")}</span>
+                            {" · "}<span className="text-amber-300">{formatNum(e.count)} deposits</span>
                           </>
                         )}
                       </div>
@@ -3905,7 +3914,16 @@ function ReceiptModal({ onClose, onGenerate, accounts, defaultAccount, entries, 
 
   // Auto-generate placeholders for blank fields so user sees what will be used
   const generateRandomRef = () => Math.random().toString(36).slice(2, 12).toUpperCase();
-  const generateRandomTxn = () => `${Date.now()}${Math.floor(Math.random() * 1e16)}`.slice(0, 35);
+  // Meta transaction IDs are formatted as two 17-digit numbers joined by a hyphen,
+  // e.g. "26907590175595082-26986223884398370". This generates a matching format.
+  const generateRandomTxn = () => {
+    const seventeenDigits = () => {
+      let s = String(Math.floor(Math.random() * 9) + 1);
+      for (let i = 0; i < 16; i++) s += Math.floor(Math.random() * 10);
+      return s;
+    };
+    return `${seventeenDigits()}-${seventeenDigits()}`;
+  };
   const generateRandomInvoice = () => `FBADS-${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 900000000) + 100000000}`;
 
   // Compute preview totals so user knows what they'll get before generating
