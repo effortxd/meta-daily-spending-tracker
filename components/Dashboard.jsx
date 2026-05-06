@@ -1582,17 +1582,23 @@ export default function MetaSpendDashboard() {
                       <div className="text-[11px] text-slate-500 mt-0.5">Raw data for spreadsheets</div>
                     </div>
                   </button>
-                  <div className="border-t border-slate-800/60" />
-                  <button
-                    onClick={() => { setShowReceiptModal(true); setShowExportMenu(false); }}
-                    className="w-full text-left px-4 py-3 hover:bg-slate-800/60 transition-colors flex items-start gap-3"
-                  >
-                    <FileText className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-                    <div className="min-w-0">
-                      <div className="text-sm text-slate-200 font-medium">Meta Receipt PDF</div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">Invoice-style summary by campaign</div>
-                    </div>
-                  </button>
+                  {/* Meta Receipt PDF is admin-only — non-admins shouldn't be
+                      able to generate fake-looking invoice documents */}
+                  {isAdmin && (
+                    <>
+                      <div className="border-t border-slate-800/60" />
+                      <button
+                        onClick={() => { setShowReceiptModal(true); setShowExportMenu(false); }}
+                        className="w-full text-left px-4 py-3 hover:bg-slate-800/60 transition-colors flex items-start gap-3"
+                      >
+                        <FileText className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                          <div className="text-sm text-slate-200 font-medium">Meta Receipt PDF</div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">Invoice-style summary by campaign</div>
+                        </div>
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -3262,7 +3268,7 @@ export default function MetaSpendDashboard() {
       )}
 
       {showImportModal && <ImportModal onClose={() => setShowImportModal(false)} onImport={handleBulkImport} />}
-      {showReceiptModal && (
+      {showReceiptModal && isAdmin && (
         <ReceiptModal
           onClose={() => setShowReceiptModal(false)}
           onGenerate={generateReceiptPDF}
