@@ -209,12 +209,21 @@ const TRANSLATIONS = {
   zh: {
     // Header & status
     "Daily Performance Dashboard": "每日业绩仪表板",
+    "Daily Performance": "每日业绩",
     "LIVE · META ADS PERFORMANCE": "实时 · META 广告表现",
+    "Performance": "表现",
+    "Search campaigns, accounts…": "搜索广告系列、账户…",
+    "Time period": "时间段",
+    "Viewer": "查看者",
     "Updated just now": "刚刚更新",
     "Updated": "更新于",
     "Spend incl.": "支出含",
     "tax": "税",
     "Export": "导出",
+    "CSV Export": "CSV 导出",
+    "Raw data for spreadsheets": "电子表格原始数据",
+    "Meta Receipt PDF": "Meta 收据 PDF",
+    "Invoice-style summary by campaign": "按广告系列分类的发票样式摘要",
     "Admin": "管理员",
     "Import": "导入",
     "Bulk delete": "批量删除",
@@ -1500,315 +1509,364 @@ export default function MetaSpendDashboard() {
     impressions: { label: t("Impressions"), color: "#60a5fa", format: formatNum },
   };
 
+  // ─── KPI strip data — drives the 6 headline tiles in the new prototype layout.
+  // Computes per-metric: current-period value, prior-period value (for delta),
+  // and a 14-day sparkline series. Period selection is driven by `heroPeriod`.
+  // Filter scoping (account/campaign/geo) is honored via summaryStats above.
+  const kpiData = useMemo(() => {
+    // Pull entries scoped to current account/campaign/geo filters so KPIs
+    // match the rest of the page when filters are applied.
+    let entriesScoped = entries;
+    let depositsScoped = deposits;
+    if (accountFilter !== "all") entriesScoped = entriesScoped.filter((e) => e.account === accountFilter);
+    if (campaignFilter !== "all") entriesScoped = entriesScoped.filter((e) => e.campaign === campaignFilter);
+    if (geoFilter !== "all") {
+      entriesScoped = entriesScoped.filter((e) => e.geo === geoFilter);
+      depositsScoped = depositsScoped.filter((d) => d.geo === geoFilter);
+    }
+
+    // 14-day spark series for each metric. Index 0 is 13 days ago, index 13 is today.
+    const taxMul = 1 + (config.taxRate || 0);
+    const sparkSpend = [];
+    const sparkImpressions = [];
+    const sparkClicks = [];
+    const sparkLeads = [];
+    const sparkDeposits = [];
+    const sparkDepAmount = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = daysAgoISO(i);
+      const dayEntries = entriesScoped.filter((e) => e.date === d);
+      const dayDeposits = depositsScoped.filter((dep) => dep.date === d);
+      sparkSpend.push(dayEntries.reduce((s, e) => s + (e.amount || 0) * taxMul, 0));
+      sparkImpressions.push(dayEntries.reduce((s, e) => s + (e.impressions || 0), 0));
+      sparkClicks.push(dayEntries.reduce((s, e) => s + (e.clicks || 0), 0));
+      sparkLeads.push(dayEntries.reduce((s, e) => s + (e.leads || 0), 0));
+      sparkDeposits.push(dayDeposits.reduce((s, dep) => s + (dep.count || 0), 0));
+      sparkDepAmount.push(dayDeposits.reduce((s, dep) => s + (dep.amount || 0), 0));
+    }
+
+    // Resolve the active period and its prior comparable window for delta calc.
+    // For "today" we compare to yesterday; for "last7" to the prior 7d; etc.
+    const today = todayISO();
+    const yesterday = daysAgoISO(1);
+    const filterRange = (list, start, end) =>
+      list.filter((x) => x.date >= start && (end ? x.date <= end : true));
+
+    let current, prior, label;
+    switch (heroPeriod) {
+      case "yesterday":
+        current = aggregate(entriesScoped.filter((e) => e.date === yesterday), depositsScoped.filter((d) => d.date === yesterday), config.taxRate);
+        prior = aggregate(entriesScoped.filter((e) => e.date === daysAgoISO(2)), depositsScoped.filter((d) => d.date === daysAgoISO(2)), config.taxRate);
+        label = t("Yesterday");
+        break;
+      case "last7":
+        current = aggregate(filterRange(entriesScoped, daysAgoISO(7)), filterRange(depositsScoped, daysAgoISO(7)), config.taxRate);
+        prior = aggregate(filterRange(entriesScoped, daysAgoISO(14), daysAgoISO(8)), filterRange(depositsScoped, daysAgoISO(14), daysAgoISO(8)), config.taxRate);
+        label = t("Last 7 days");
+        break;
+      case "last30":
+        current = aggregate(filterRange(entriesScoped, daysAgoISO(30)), filterRange(depositsScoped, daysAgoISO(30)), config.taxRate);
+        prior = aggregate(filterRange(entriesScoped, daysAgoISO(60), daysAgoISO(31)), filterRange(depositsScoped, daysAgoISO(60), daysAgoISO(31)), config.taxRate);
+        label = t("Last 30 days");
+        break;
+      case "mtd": {
+        const monthStart = today.slice(0, 7) + "-01";
+        // Prior is same-day-of-month range from the previous month
+        const prevMonthDate = new Date(today + "T00:00:00");
+        prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+        const prevMonthStart = prevMonthDate.toISOString().slice(0, 7) + "-01";
+        const prevMonthSameDay = prevMonthDate.toISOString().slice(0, 10);
+        current = aggregate(filterRange(entriesScoped, monthStart), filterRange(depositsScoped, monthStart), config.taxRate);
+        prior = aggregate(filterRange(entriesScoped, prevMonthStart, prevMonthSameDay), filterRange(depositsScoped, prevMonthStart, prevMonthSameDay), config.taxRate);
+        label = t("Month to date");
+        break;
+      }
+      case "allTime":
+        current = aggregate(entriesScoped, depositsScoped, config.taxRate);
+        prior = null; // no comparable prior for all-time
+        label = t("All-time");
+        break;
+      case "today":
+      default:
+        current = aggregate(entriesScoped.filter((e) => e.date === today), depositsScoped.filter((d) => d.date === today), config.taxRate);
+        prior = aggregate(entriesScoped.filter((e) => e.date === yesterday), depositsScoped.filter((d) => d.date === yesterday), config.taxRate);
+        label = t("Today");
+        break;
+    }
+
+    const pctDelta = (curr, prev) => {
+      if (!prev || prev === 0) return null;
+      return ((curr - prev) / prev) * 100;
+    };
+
+    return {
+      label,
+      current,
+      prior,
+      deltas: prior ? {
+        spend: pctDelta(current.spend, prior.spend),
+        impressions: pctDelta(current.impressions, prior.impressions),
+        clicks: pctDelta(current.clicks, prior.clicks),
+        leads: pctDelta(current.leads, prior.leads),
+        deposits: pctDelta(current.deposits, prior.deposits),
+        depAmount: pctDelta(current.depositAmount, prior.depositAmount),
+      } : { spend: null, impressions: null, clicks: null, leads: null, deposits: null, depAmount: null },
+      spark: {
+        spend: sparkSpend,
+        impressions: sparkImpressions,
+        clicks: sparkClicks,
+        leads: sparkLeads,
+        deposits: sparkDeposits,
+        depAmount: sparkDepAmount,
+      },
+    };
+  }, [entries, deposits, accountFilter, campaignFilter, geoFilter, heroPeriod, config.taxRate, lang]);
+
   return (
-    <div className="min-h-screen text-slate-100 p-3 sm:p-4 md:p-8" style={{ background: "radial-gradient(1200px 600px at 10% -10%, rgba(34,211,238,0.08), transparent 60%), radial-gradient(900px 500px at 100% 0%, rgba(167,139,250,0.06), transparent 60%), #0a0e1a", fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
-        .font-display { font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.02em; }
-        .font-mono-num { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
-        .glass { background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(12px); border: 1px solid rgba(148,163,184,0.10); }
-        .glass-hover:hover { border-color: rgba(148,163,184,0.22); }
-        input, select, textarea { color-scheme: dark; }
-        ::placeholder { color: rgb(100 116 139); }
-        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
-        .scroll-x::-webkit-scrollbar { height: 6px; }
-        .scroll-x::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 3px; }
-        .input-base { width: 100%; padding: 0.625rem 0.75rem; border-radius: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(51, 65, 85, 0.5); color: rgb(241, 245, 249); font-size: 0.875rem; outline: none; transition: all 0.15s; }
-        .input-base:focus { border-color: rgba(34, 211, 238, 0.5); box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.3); }
-      `}</style>
+    <>
+      {/* ─── Sticky top bar: breadcrumb + global actions ─── */}
+      <header className="topbar">
+        <div className="crumb">
+          <span className="live-dot" aria-hidden="true"></span>
+          <span>LIVE</span>
+          <span className="sep">▸</span>
+          <span>Meta Ads</span>
+          <span className="sep">▸</span>
+          <span className="crumb-on">
+            {t("Performance")} · {accountFilter !== "all" ? accountFilter : "WeTrade"}
+          </span>
+        </div>
 
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 md:gap-4 mb-6 md:mb-8">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[10px] md:text-xs uppercase tracking-[0.25em] text-cyan-400/80 mb-1.5 md:mb-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span>
-              <span className="truncate">{t("LIVE · META ADS PERFORMANCE")}</span>
-            </div>
-            <h1 className="font-display text-2xl sm:text-3xl md:text-5xl font-extrabold text-white leading-tight">{t("Daily Performance Dashboard")}</h1>
-            <p className="text-slate-400 mt-1.5 md:mt-2 text-xs md:text-sm flex items-center gap-2 md:gap-3 flex-wrap">
-              <span>{new Date().toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
-              <span className="text-slate-600 hidden sm:inline">·</span>
-              <span className="text-slate-500">{t("Updated")} {timeAgo(config.lastUpdated, lang)}</span>
-              {(config.taxRate || 0) > 0 && (
-                <>
-                  <span className="text-slate-600 hidden sm:inline">·</span>
-                  <span className="text-amber-400/80">
-                    {t("Spend incl.")} {((config.taxRate || 0) * 100).toFixed(0)}% {t("tax")}
-                  </span>
-                </>
-              )}
-            </p>
+        {/* Search is decorative for now — wired to no real search engine yet.
+            ⌘K shortcut is a hint to the user that this is the convention. */}
+        <div className="glob-search" role="search" aria-label="Search">
+          <svg className="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <span>{t("Search campaigns, accounts…")}</span>
+          <span className="kbd">⌘K</span>
+        </div>
+
+        <div className="topbar-spacer"></div>
+
+        <div className="topbar-actions">
+          {/* Language toggle — EN / 中文 segmented control */}
+          <div className="seg" role="tablist" aria-label="Language">
+            <button className={lang === "en" ? "on" : ""} onClick={() => setLang("en")}>EN</button>
+            <button className={lang === "zh" ? "on" : ""} onClick={() => setLang("zh")}>中文</button>
           </div>
-          <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
-            {/* Language switcher — pill toggle EN | 中文 */}
-            <div className="flex items-center gap-0.5 p-0.5 rounded-lg glass">
-              <button
-                onClick={() => setLang("en")}
-                className={`px-2 md:px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  lang === "en" ? "bg-cyan-500/25 text-cyan-200" : "text-slate-500 hover:text-slate-200"
-                }`}
-                title="English"
-              >EN</button>
-              <button
-                onClick={() => setLang("zh")}
-                className={`px-2 md:px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  lang === "zh" ? "bg-cyan-500/25 text-cyan-200" : "text-slate-500 hover:text-slate-200"
-                }`}
-                title="简体中文"
-              >中文</button>
-            </div>
-            <button onClick={loadAll} className="flex items-center gap-2 px-2.5 md:px-3 py-2 md:py-2.5 rounded-lg glass glass-hover text-sm text-slate-300" title={t("Refresh")}><RefreshCw className="w-4 h-4" /></button>
-            {/* Export dropdown — CSV (raw data) and Receipt PDF (Meta-style invoice) */}
-            <div className="relative" data-export-menu>
-              <button
-                onClick={() => setShowExportMenu((v) => !v)}
-                disabled={entries.length === 0 && deposits.length === 0}
-                className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg glass glass-hover text-sm text-slate-200 disabled:opacity-40"
+
+          <button className="icon-btn" onClick={loadAll} title={t("Refresh")} aria-label={t("Refresh")}>
+            <RefreshCw className="ic" />
+          </button>
+
+          {/* Export dropdown */}
+          <div className="relative" data-export-menu>
+            <button
+              onClick={() => setShowExportMenu((v) => !v)}
+              disabled={entries.length === 0 && deposits.length === 0}
+              className="proto-btn"
+              style={{ opacity: (entries.length === 0 && deposits.length === 0) ? 0.4 : 1 }}
+            >
+              <Download className="ic" />
+              {t("Export")}
+              <svg className="ic" viewBox="0 0 24 24" style={{ width: 10, height: 10 }}><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            {showExportMenu && (
+              <div
+                className="absolute right-0 mt-2 w-56 rounded-lg shadow-xl shadow-black/40 z-50 overflow-hidden"
+                style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
               >
-                <Download className="w-4 h-4" /><span className="hidden md:inline">{t("Export")}</span>
-                <ChevronDown className="w-3 h-3 hidden md:inline" />
-              </button>
-              {showExportMenu && (
-                <div className="absolute right-0 mt-2 w-56 rounded-lg glass border border-slate-700/60 shadow-xl shadow-black/40 z-50 overflow-hidden">
-                  <button
-                    onClick={() => { exportCSV(); setShowExportMenu(false); }}
-                    className="w-full text-left px-4 py-3 hover:bg-slate-800/60 transition-colors flex items-start gap-3"
-                  >
-                    <Download className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-                    <div className="min-w-0">
-                      <div className="text-sm text-slate-200 font-medium">CSV Export</div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">Raw data for spreadsheets</div>
-                    </div>
-                  </button>
-                  {/* Meta Receipt PDF is admin-only — non-admins shouldn't be
-                      able to generate fake-looking invoice documents */}
-                  {isAdmin && (
-                    <>
-                      <div className="border-t border-slate-800/60" />
-                      <button
-                        onClick={() => { setShowReceiptModal(true); setShowExportMenu(false); }}
-                        className="w-full text-left px-4 py-3 hover:bg-slate-800/60 transition-colors flex items-start gap-3"
-                      >
-                        <FileText className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-                        <div className="min-w-0">
-                          <div className="text-sm text-slate-200 font-medium">Meta Receipt PDF</div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">Invoice-style summary by campaign</div>
-                        </div>
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-            {isAdmin && (
-              <button onClick={() => setShowImportModal(true)} className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg bg-violet-500/20 border border-violet-500/40 text-violet-300 text-sm font-medium hover:bg-violet-500/30">
-                <Upload className="w-4 h-4" /><span className="hidden md:inline">{t("Import")}</span>
-              </button>
-            )}
-            {isAdmin && (
-              <button onClick={() => setShowDeleteModal(true)} className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg bg-pink-500/15 border border-pink-500/30 text-pink-300 text-sm font-medium hover:bg-pink-500/25">
-                <Trash2 className="w-4 h-4" /><span className="hidden md:inline">{t("Bulk delete")}</span>
-              </button>
-            )}
-            {isAdmin ? (
-              <button onClick={exitAdmin} className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-sm font-medium hover:bg-cyan-500/30">
-                <LogOut className="w-4 h-4" /><span className="hidden md:inline">{lang === "zh" ? "退出管理员" : "Exit Admin"}</span>
-              </button>
-            ) : (
-              <button onClick={openAdminModal} className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg glass glass-hover text-sm text-slate-300">
-                <Lock className="w-4 h-4" /><span className="hidden md:inline">{t("Admin")}</span>
-              </button>
+                <button
+                  onClick={() => { exportCSV(); setShowExportMenu(false); }}
+                  className="w-full text-left px-4 py-3 transition-colors flex items-start gap-3"
+                  style={{ background: "transparent" }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-2)"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                >
+                  <Download className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "var(--muted)" }} />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium" style={{ color: "var(--fg)" }}>{t("CSV Export")}</div>
+                    <div className="text-[11px] mt-0.5" style={{ color: "var(--muted-2)" }}>{t("Raw data for spreadsheets")}</div>
+                  </div>
+                </button>
+                {/* Meta Receipt PDF is admin-only */}
+                {isAdmin && (
+                  <>
+                    <div style={{ borderTop: "1px solid var(--border-soft)" }} />
+                    <button
+                      onClick={() => { setShowReceiptModal(true); setShowExportMenu(false); }}
+                      className="w-full text-left px-4 py-3 transition-colors flex items-start gap-3"
+                      style={{ background: "transparent" }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface-2)"}
+                      onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                    >
+                      <FileText className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "var(--warn)" }} />
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium" style={{ color: "var(--fg)" }}>{t("Meta Receipt PDF")}</div>
+                        <div className="text-[11px] mt-0.5" style={{ color: "var(--muted-2)" }}>{t("Invoice-style summary by campaign")}</div>
+                      </div>
+                    </button>
+                  </>
+                )}
+              </div>
             )}
           </div>
-        </header>
 
-        {/* Hero — switchable period (Today / Yesterday / 7D / 30D / MTD / All-time).
-            Bosses pick what they want to see at the top without changing filters below. */}
-        {(() => {
-          // Map heroPeriod key to the right summaryStats bucket + display labels
-          const periodMap = {
-            today: { label: t("Today's Spend"), data: summaryStats.today, compareLabel: `vs ${formatUSD(summaryStats.yesterday.spend)} yesterday` },
-            yesterday: { label: t("Yesterday's Spend"), data: summaryStats.yesterday, compareLabel: null },
-            last7: { label: t("Last 7 Days"), data: summaryStats.last7, compareLabel: null },
-            last30: { label: t("Last 30 Days"), data: summaryStats.last30, compareLabel: null },
-            mtd: { label: t("Month to Date"), data: summaryStats.mtd, compareLabel: null },
-            allTime: { label: t("All-time Spend"), data: summaryStats.allTime, compareLabel: null },
-          };
-          const active = periodMap[heroPeriod] || periodMap.today;
-          const showDayCompare = heroPeriod === "today";
-          // Daily target pacing only makes sense for "today" bucket
-          const showTargetPacing = heroPeriod === "today" && config.dailyBudget > 0;
+          {/* Admin actions — only for admins */}
+          {isAdmin && (
+            <button onClick={() => setShowImportModal(true)} className="proto-btn">
+              <Upload className="ic" />
+              <span className="hidden md:inline">{t("Import")}</span>
+            </button>
+          )}
+          {isAdmin && (
+            <button onClick={() => setShowDeleteModal(true)} className="proto-btn">
+              <Trash2 className="ic" />
+              <span className="hidden md:inline">{t("Bulk delete")}</span>
+            </button>
+          )}
+          {isAdmin ? (
+            <button onClick={exitAdmin} className="proto-btn">
+              <LogOut className="ic" />
+              <span className="hidden md:inline">{lang === "zh" ? "退出管理员" : t("Exit Admin")}</span>
+            </button>
+          ) : (
+            <button onClick={openAdminModal} className="proto-btn">
+              <Lock className="ic" />
+              <span className="hidden md:inline">{t("Admin")}</span>
+            </button>
+          )}
 
-          return (
-            <div className="glass rounded-2xl mb-6 relative overflow-hidden">
-              <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(34,211,238,0.18), transparent 70%)" }} />
-              <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(167,139,250,0.10), transparent 70%)" }} />
+          {/* Avatar — current user initials */}
+          <span className="avatar-circle" title={isAdmin ? t("Admin") : t("Viewer")}>
+            {isAdmin ? "AD" : "VW"}
+          </span>
+        </div>
+      </header>
 
-              {/* Period switcher tabs — scrollable on mobile to fit all 6 options */}
-              <div className="relative px-3 md:px-6 pt-4 pb-0 flex items-center gap-1.5 overflow-x-auto scroll-x flex-nowrap">
-                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mr-1 shrink-0">{t("Showing:")}</span>
-                {[
-                  { key: "today", label: t("Today") },
-                  { key: "yesterday", label: t("Yesterday") },
-                  { key: "last7", label: t("Last 7d") },
-                  { key: "last30", label: t("Last 30d") },
-                  { key: "mtd", label: t("MTD") },
-                  { key: "allTime", label: t("All-time") },
-                ].map((p) => (
-                  <button
-                    key={p.key}
-                    onClick={() => setHeroPeriod(p.key)}
-                    className={`shrink-0 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all whitespace-nowrap ${
-                      heroPeriod === p.key
-                        ? "bg-cyan-500/20 text-cyan-300 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.4)]"
-                        : "text-slate-500 hover:text-slate-200 hover:bg-slate-800/40"
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="relative">
-                {/* Top row: Hero spend (2/3) + Period Detail or Daily Target (1/3) */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
-                  <div className="lg:col-span-2 p-4 md:p-7 lg:border-r lg:border-slate-800/60">
-                    <div className="text-[10px] uppercase tracking-[0.25em] text-cyan-400/80 mb-2 flex items-center gap-1.5">
-                      <Activity className="w-3 h-3" /> {active.label}
-                    </div>
-                    <div className="font-mono-num text-3xl sm:text-4xl md:text-5xl lg:text-5xl xl:text-6xl font-extrabold text-white leading-none mb-3 truncate">
-                      {formatUSD(active.data.spend)}
-                    </div>
-                    {showDayCompare ? (
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {stats.dod !== null && !isNaN(stats.dod) ? (
-                          <div className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${stats.dod >= 0 ? "bg-emerald-500/15 text-emerald-300" : "bg-pink-500/15 text-pink-300"}`}>
-                            {stats.dod >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                            <span className="font-mono-num">{stats.dod >= 0 ? "+" : ""}{stats.dod.toFixed(1)}%</span>
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-slate-600">—</span>
-                        )}
-                        <span className="text-[11px] text-slate-500 font-mono-num">{active.compareLabel}</span>
-                      </div>
-                    ) : (
-                      <div className="text-[11px] text-slate-500 font-mono-num">
-                        {active.data.tax > 0 && `Incl. ${formatUSDCompact(active.data.tax)} tax`}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right column: Daily target (today) OR period-specific extra info */}
-                  <div className="lg:col-span-1 p-4 md:p-7 border-t lg:border-t-0 border-slate-800/60">
-                    {showTargetPacing ? (
-                      <>
-                        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-2 flex items-center gap-1.5">
-                          <Target className="w-3 h-3" /> {t("Daily Target")}
-                        </div>
-                        <div className="flex items-baseline gap-2 mb-2">
-                          <span className="font-mono-num text-xl font-bold text-white">{formatUSDCompact(active.data.spend)}</span>
-                          <span className="text-slate-500 font-mono-num text-xs">/ {formatUSDCompact(config.dailyBudget)}</span>
-                        </div>
-                        <div className="h-1.5 bg-slate-800/60 rounded-full overflow-hidden mb-2">
-                          <div
-                            className="h-full rounded-full transition-all duration-700"
-                            style={{
-                              width: `${Math.min(budgetPct, 100)}%`,
-                              background: budgetStatus === "over" ? "#f472b6" : budgetStatus === "on" ? "#facc15" : "#22d3ee",
-                              boxShadow: `0 0 12px ${budgetStatus === "over" ? "#f472b680" : budgetStatus === "on" ? "#facc1580" : "#22d3ee80"}`,
-                            }}
-                          />
-                        </div>
-                        <div className={`text-[11px] font-medium flex items-center gap-1 ${budgetStatus === "over" ? "text-pink-400" : budgetStatus === "on" ? "text-amber-400" : "text-cyan-400"}`}>
-                          <span className="w-1 h-1 rounded-full" style={{ background: "currentColor" }} />
-                          {budgetStatus === "over" ? `${(budgetPct - 100).toFixed(0)}% over` : budgetStatus === "on" ? "On pace" : `${(100 - budgetPct).toFixed(0)}% under`}
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-2 flex items-center gap-1.5">
-                          <Activity className="w-3 h-3" /> {t("Period Detail")}
-                        </div>
-                        <div className="space-y-1.5 text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">{t("Impressions")}</span>
-                            <span className="font-mono-num text-slate-200">{active.data.impressions ? formatNumCompact(active.data.impressions) : "—"}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">{t("Clicks")}</span>
-                            <span className="font-mono-num text-slate-200">{active.data.clicks ? formatNumCompact(active.data.clicks) : "—"}</span>
-                          </div>
-                          {active.data.l2d != null && (
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">{t("Lead → Dep")}</span>
-                              <span className="font-mono-num text-slate-200">{formatPct(active.data.l2d)}</span>
-                            </div>
-                          )}
-                          {active.data.tax > 0 && (
-                            <div className="flex justify-between border-t border-slate-800/60 pt-1.5 mt-1.5">
-                              <span className="text-slate-500">{t("Tax incl.")}</span>
-                              <span className="font-mono-num text-amber-300">{formatUSDCompact(active.data.tax)}</span>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Bottom row: 5 metric tiles spanning full width */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 border-t border-slate-800/60">
-                  <HeroStat label={t("Leads")} value={formatNumCompact(active.data.leads)} icon={<Users className="w-3 h-3" />} accent="emerald" />
-                  <HeroStat label={t("Deposits")} value={formatNumCompact(active.data.deposits)} icon={<Banknote className="w-3 h-3" />} accent="amber" />
-                  <HeroStat
-                    label="Dep $"
-                    value={active.data.depositAmount > 0 ? formatUSDCompact(active.data.depositAmount) : "—"}
-                    sublabel={active.data.deposits > 0 && active.data.depositAmount > 0 ? `avg ${formatUSDCompact(active.data.depositAmount / active.data.deposits)}` : null}
-                    icon={<DollarSign className="w-3 h-3" />}
-                    accent="emerald"
-                  />
-                  <HeroStat label={t("CPL")} value={active.data.cpl != null ? formatUSDCompact(active.data.cpl) : "—"} icon={<Target className="w-3 h-3" />} accent="violet" />
-                  <HeroStat label={t("CPD")} value={active.data.cpd != null ? formatUSDCompact(active.data.cpd) : "—"} icon={<Wallet className="w-3 h-3" />} accent="cyan" />
-                </div>
-              </div>
+      <main className="wrap">
+        {/* ─── Page head: title + meta line + period tabs ─── */}
+        <section className="page-head">
+          <div>
+            <h1 className="title">{t("Daily Performance")}</h1>
+            <div className="title-meta">
+              <span className="pip">
+                {new Date().toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+              </span>
+              <span className="pip" style={{ color: "var(--muted-2)" }}>·</span>
+              <span className="pip">{t("Updated")} {timeAgo(config.lastUpdated, lang)}</span>
+              {(config.taxRate || 0) > 0 && (
+                <span className="pill-warn-inline">
+                  {t("Spend incl.")} {((config.taxRate || 0) * 100).toFixed(0)}% {t("tax")}
+                </span>
+              )}
             </div>
-          );
-        })()}
+          </div>
+          {/* Period tabs — same options as before, now in the top-right */}
+          <nav className="period-tabs" aria-label={t("Time period")}>
+            {[
+              { key: "today", label: t("Today") },
+              { key: "yesterday", label: t("Yesterday") },
+              { key: "last7", label: t("Last 7d") },
+              { key: "last30", label: t("Last 30d") },
+              { key: "mtd", label: t("MTD") },
+              { key: "allTime", label: t("All-time") },
+            ].map((p) => (
+              <button
+                key={p.key}
+                onClick={() => setHeroPeriod(p.key)}
+                className={heroPeriod === p.key ? "on" : ""}
+              >
+                {p.label}
+              </button>
+            ))}
+          </nav>
+        </section>
+
+        {/* ─── KPI strip: 6 headline metrics ───
+            Each tile shows current value, WoW delta, and a 14-day sparkline.
+            Period switcher above drives which window each tile aggregates. */}
+        <section className="kpi-strip" aria-label="Headline metrics">
+          <KpiTile
+            label={t("Spend")}
+            dotVar="--accent"
+            value={formatUSD(kpiData.current.spend)}
+            delta={kpiData.deltas.spend}
+            sparkSeries={kpiData.spark.spend}
+            sparkColor="var(--accent)"
+          />
+          <KpiTile
+            label={t("Impressions")}
+            dotVar="--accent-2"
+            value={formatNumCompact(kpiData.current.impressions)}
+            delta={kpiData.deltas.impressions}
+            sparkSeries={kpiData.spark.impressions}
+            sparkColor="var(--accent-2)"
+          />
+          <KpiTile
+            label={t("Clicks")}
+            dotVar="--plum"
+            value={formatNumCompact(kpiData.current.clicks)}
+            delta={kpiData.deltas.clicks}
+            sparkSeries={kpiData.spark.clicks}
+            sparkColor="var(--plum)"
+          />
+          <KpiTile
+            label={t("Leads")}
+            dotVar="--warn"
+            value={formatNumCompact(kpiData.current.leads)}
+            delta={kpiData.deltas.leads}
+            sparkSeries={kpiData.spark.leads}
+            sparkColor="var(--warn)"
+          />
+          <KpiTile
+            label={t("Deposits")}
+            dotVar="--good"
+            value={formatNumCompact(kpiData.current.deposits)}
+            delta={kpiData.deltas.deposits}
+            sparkSeries={kpiData.spark.deposits}
+            sparkColor="var(--good)"
+          />
+          <KpiTile
+            label={t("Deposit $")}
+            dotVar="--good"
+            value={kpiData.current.depositAmount > 0 ? formatUSD(kpiData.current.depositAmount) : "—"}
+            delta={kpiData.deltas.depAmount}
+            sparkSeries={kpiData.spark.depAmount}
+            sparkColor="var(--good)"
+          />
+        </section>
 
         {/* Performance Summary — multi-period numbers at a glance */}
-        <div className="glass rounded-2xl overflow-hidden mb-8">
-          <div className="px-5 md:px-6 py-4 border-b border-slate-800/60 flex items-center justify-between flex-wrap gap-2">
+        <article className="proto-card">
+          <header className="card-head">
             <div>
-              <h2 className="font-display text-lg font-bold text-white">{t("Performance Summary")}</h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                All periods at a glance
+              <h2>{t("Performance Summary")}</h2>
+              <div className="sub">
                 {accountFilter !== "all" || geoFilter !== "all"
-                  ? ` · Filtered${accountFilter !== "all" ? ` to ${accountFilter}` : ""}${geoFilter !== "all" ? ` · ${geoFilter}` : ""}`
-                  : " · All accounts & countries"}
-              </p>
+                  ? `Filtered${accountFilter !== "all" ? ` to ${accountFilter}` : ""}${geoFilter !== "all" ? ` · ${geoFilter}` : ""}`
+                  : "All periods at a glance · all accounts · all countries"}
+              </div>
             </div>
-          </div>
-          <div className="overflow-x-auto scroll-x">
-            <table className="w-full text-sm min-w-[700px]">
+          </header>
+          <div style={{ overflowX: "auto" }}>
+            <table className="proto-table" style={{ minWidth: 700 }}>
               <thead>
-                <tr className="text-[10px] uppercase tracking-[0.15em] text-slate-500 border-b border-slate-800/60">
-                  <th className="text-left px-4 py-3 font-medium">Period</th>
-                  <th className="text-right px-4 py-3 font-medium">{t("Spend")}</th>
-                  <th className="text-right px-4 py-3 font-medium">Impressions</th>
-                  <th className="text-right px-4 py-3 font-medium">{t("Clicks")}</th>
-                  <th className="text-right px-4 py-3 font-medium">{t("Leads")}</th>
-                  <th className="text-right px-4 py-3 font-medium">{t("Deposits")}</th>
-                  <th className="text-right px-4 py-3 font-medium">{t("Dep $")}</th>
-                  <th className="text-right px-4 py-3 font-medium">{t("CPL")}</th>
-                  <th className="text-right px-4 py-3 font-medium">{t("CPD")}</th>
-                  <th className="text-right px-4 py-3 font-medium">L→D %</th>
+                <tr>
+                  <th>Period</th>
+                  <th>{t("Spend")}</th>
+                  <th>Impressions</th>
+                  <th>{t("Clicks")}</th>
+                  <th>{t("Leads")}</th>
+                  <th>{t("Deposits")}</th>
+                  <th>{t("Dep $")}</th>
+                  <th>{t("CPL")}</th>
+                  <th>{t("CPD")}</th>
+                  <th>L → D %</th>
                 </tr>
               </thead>
               <tbody>
                 {[
-                  { label: t("Today"), data: summaryStats.today },
+                  { label: t("Today"), data: summaryStats.today, today: true },
                   { label: t("Yesterday"), data: summaryStats.yesterday },
                   { label: t("Last 7 days"), data: summaryStats.last7 },
                   { label: t("Last 30 days"), data: summaryStats.last30 },
@@ -1817,200 +1875,172 @@ export default function MetaSpendDashboard() {
                 ].map((row) => (
                   <tr
                     key={row.label}
-                    className={
-                      row.emphasize
-                        ? "bg-cyan-500/5 border-t-2 border-cyan-500/30"
-                        : "border-b border-slate-800/40 hover:bg-slate-800/20"
-                    }
+                    className={row.emphasize ? "row-total" : row.today ? "row-today" : ""}
                   >
-                    <td className={`px-4 py-3 ${row.emphasize ? "text-cyan-300 font-bold" : "text-slate-200 font-medium"}`}>
-                      {row.label}
+                    <td>{row.label}</td>
+                    <td><span className="num">{formatUSD(row.data.spend)}</span></td>
+                    <td><span className="num">{row.data.impressions ? formatNumCompact(row.data.impressions) : "—"}</span></td>
+                    <td><span className="num">{row.data.clicks ? formatNumCompact(row.data.clicks) : "—"}</span></td>
+                    <td>
+                      <span className="num" style={row.data.leads > 0 ? { color: "var(--good)" } : {}}>
+                        {row.data.leads ? formatNumCompact(row.data.leads) : "—"}
+                      </span>
                     </td>
-                    <td className={`px-4 py-3 text-right font-mono-num font-semibold ${row.emphasize ? "text-cyan-300" : "text-slate-100"}`}>
-                      {formatUSD(row.data.spend)}
+                    <td>
+                      <span className="num" style={row.data.deposits > 0 ? { color: "var(--warn)" } : {}}>
+                        {row.data.deposits ? formatNumCompact(row.data.deposits) : "—"}
+                      </span>
                     </td>
-                    <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
-                      {row.data.impressions ? formatNumCompact(row.data.impressions) : "—"}
+                    <td>
+                      <span className="num" style={row.data.depositAmount > 0 ? { color: "var(--good)" } : {}}>
+                        {row.data.depositAmount > 0 ? formatUSDCompact(row.data.depositAmount) : "—"}
+                      </span>
                     </td>
-                    <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
-                      {row.data.clicks ? formatNumCompact(row.data.clicks) : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono-num text-emerald-300 font-semibold">
-                      {row.data.leads ? formatNumCompact(row.data.leads) : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono-num text-amber-300 font-semibold">
-                      {row.data.deposits ? formatNumCompact(row.data.deposits) : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono-num text-emerald-300 font-semibold">
-                      {row.data.depositAmount > 0 ? formatUSDCompact(row.data.depositAmount) : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
-                      {row.data.cpl != null ? formatUSDCompact(row.data.cpl) : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
-                      {row.data.cpd != null ? formatUSDCompact(row.data.cpd) : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono-num text-slate-400 text-xs">
-                      {formatPct(row.data.l2d)}
-                    </td>
+                    <td><span className="num">{row.data.cpl != null ? formatUSDCompact(row.data.cpl) : "—"}</span></td>
+                    <td><span className="num">{row.data.cpd != null ? formatUSDCompact(row.data.cpd) : "—"}</span></td>
+                    <td><span className="num">{formatPct(row.data.l2d)}</span></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        </article>
 
         {/* Budget Status — top-ups vs spend, remaining */}
         {(topups.length > 0 || entries.length > 0) && (
-          <div className="glass rounded-2xl p-5 md:p-6 mb-8">
-            <div className="flex items-center gap-2 mb-1">
-              <Wallet className="w-4 h-4 text-emerald-400" />
-              <h2 className="font-display text-lg font-bold text-white">{t("Budget Status")}</h2>
-            </div>
-            <p className="text-xs text-slate-500 mb-5">
-              {t("Total loaded vs spent across all time")}
-              {(config.taxRate || 0) > 0 && <span className="text-amber-400/70"> · Spent incl. {((config.taxRate || 0) * 100).toFixed(0)}% tax</span>}
-              {accountFilter !== "all" || geoFilter !== "all"
-                ? ` · Filtered${accountFilter !== "all" ? ` to ${accountFilter}` : ""}${geoFilter !== "all" ? ` · ${geoFilter}` : ""}`
-                : ""}
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-5">
-              <div className="border-l-2 border-emerald-500/40 pl-3 sm:border-l-0 sm:pl-0">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-1.5">{t("Loaded")}</div>
-                <div className="font-mono-num text-2xl md:text-3xl font-bold text-emerald-300">
-                  {formatUSD(budgetStats.totalLoaded)}
+          <article className="proto-card">
+            <header className="card-head">
+              <div>
+                <h2>{t("Budget Status")}</h2>
+                <div className="sub">
+                  {t("Total loaded vs spent across all time")}
+                  {(config.taxRate || 0) > 0 && ` · Spent incl. ${((config.taxRate || 0) * 100).toFixed(0)}% tax`}
+                  {accountFilter !== "all" || geoFilter !== "all"
+                    ? ` · Filtered${accountFilter !== "all" ? ` to ${accountFilter}` : ""}${geoFilter !== "all" ? ` · ${geoFilter}` : ""}`
+                    : ""}
                 </div>
               </div>
-              <div className="border-l-2 border-cyan-500/40 pl-3 sm:border-l-0 sm:pl-0">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-1.5">{t("Spent")}</div>
-                <div className="font-mono-num text-2xl md:text-3xl font-bold text-cyan-300">
-                  {formatUSD(budgetStats.totalSpent)}
+              {budgetStats.totalLoaded > 0 && (
+                <span className={`pill ${
+                  budgetStats.remaining < 0 ? "pill-danger"
+                  : budgetStats.utilizationPct > 80 ? "pill-warn"
+                  : "pill-good"
+                }`}>
+                  {budgetStats.remaining < 0
+                    ? "over budget"
+                    : budgetStats.utilizationPct > 80
+                    ? "top-up soon"
+                    : "on track"}
+                </span>
+              )}
+            </header>
+            <div className="gauge">
+              <div className="gauge-row">
+                <div className="gauge-stat">
+                  <div className="gauge-label">{t("Loaded")}</div>
+                  <div className="gauge-value" style={{ color: "var(--good)" }}>
+                    {formatUSD(budgetStats.totalLoaded)}
+                  </div>
                 </div>
-              </div>
-              <div className={`border-l-2 pl-3 sm:border-l-0 sm:pl-0 ${
-                budgetStats.remaining < 0 ? "border-pink-500/40"
-                : budgetStats.utilizationPct > 80 ? "border-amber-500/40"
-                : "border-slate-500/40"
-              }`}>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-1.5">{t("Remaining")}</div>
-                <div
-                  className={`font-mono-num text-2xl md:text-3xl font-bold ${
-                    budgetStats.remaining < 0
-                      ? "text-pink-400"
-                      : budgetStats.utilizationPct > 80
-                      ? "text-amber-300"
-                      : "text-white"
-                  }`}
-                >
-                  {formatUSD(budgetStats.remaining)}
+                <div className="gauge-stat">
+                  <div className="gauge-label">{t("Spent")}</div>
+                  <div className="gauge-value accent">
+                    {formatUSD(budgetStats.totalSpent)}
+                  </div>
                 </div>
-              </div>
-            </div>
-
-            {budgetStats.totalLoaded > 0 && (
-              <>
-                <div className="h-2 bg-slate-800/60 rounded-full overflow-hidden mb-1.5">
+                <div className="gauge-stat">
+                  <div className="gauge-label">{t("Remaining")}</div>
                   <div
-                    className="h-full rounded-full transition-all duration-500"
+                    className="gauge-value"
                     style={{
-                      width: `${Math.min(budgetStats.utilizationPct, 100)}%`,
-                      background:
-                        budgetStats.utilizationPct > 100
-                          ? "#f472b6"
-                          : budgetStats.utilizationPct > 80
-                          ? "#fbbf24"
-                          : "#22d3ee",
+                      color: budgetStats.remaining < 0
+                        ? "var(--danger)"
+                        : budgetStats.utilizationPct > 80
+                        ? "var(--warn)"
+                        : "var(--fg)"
                     }}
-                  />
-                </div>
-                <div className="flex items-center justify-between text-xs mb-5">
-                  <span className="text-slate-500">{budgetStats.utilizationPct.toFixed(1)}% used</span>
-                  {budgetStats.remaining < 0 && (
-                    <span className="text-pink-400 font-medium">⚠ Spent more than loaded</span>
-                  )}
-                  {budgetStats.remaining >= 0 && budgetStats.utilizationPct > 80 && (
-                    <span className="text-amber-400 font-medium">⚠ {t("Top-up soon — under 20% left")}</span>
-                  )}
-                </div>
-              </>
-            )}
-
-            {budgetStats.byAccount.length > 0 && (
-              <div className="pt-4 border-t border-slate-800/60">
-                <div className="text-xs uppercase tracking-wider text-slate-500 mb-3">{t("By Account")}</div>
-                <div className="overflow-x-auto scroll-x">
-                  <table className="w-full text-sm min-w-[600px]">
-                    <thead>
-                      <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-800/60">
-                        <th className="text-left px-3 py-2 font-medium">{t("Account")}</th>
-                        <th className="text-right px-3 py-2 font-medium">{t("Loaded")}</th>
-                        <th className="text-right px-3 py-2 font-medium">{t("Spent")}</th>
-                        <th className="text-right px-3 py-2 font-medium">{t("Remaining")}</th>
-                        <th className="text-right px-3 py-2 font-medium">{t("USED")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {budgetStats.byAccount.map((a) => (
-                        <tr key={a.name} className="border-b border-slate-800/40 hover:bg-slate-800/20">
-                          <td className="px-3 py-2.5 text-slate-200 text-sm">{a.name}</td>
-                          <td className="px-3 py-2.5 text-right font-mono-num text-emerald-300 text-xs">
-                            {a.loaded > 0 ? formatUSD(a.loaded) : "—"}
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-mono-num text-cyan-300 text-xs">
-                            {formatUSD(a.spent)}
-                          </td>
-                          <td
-                            className={`px-3 py-2.5 text-right font-mono-num text-xs font-semibold ${
-                              a.remaining < 0
-                                ? "text-pink-400"
-                                : a.utilizationPct > 80
-                                ? "text-amber-300"
-                                : "text-white"
-                            }`}
-                          >
-                            {a.loaded > 0 ? formatUSD(a.remaining) : "—"}
-                          </td>
-                          <td className="px-3 py-2.5 text-right">
-                            {a.loaded > 0 ? (
-                              <div className="inline-flex items-center gap-2 justify-end w-full">
-                                <div className="w-12 h-1 bg-slate-800 rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full"
-                                    style={{
-                                      width: `${Math.min(a.utilizationPct, 100)}%`,
-                                      background:
-                                        a.utilizationPct > 100
-                                          ? "#f472b6"
-                                          : a.utilizationPct > 80
-                                          ? "#fbbf24"
-                                          : "#22d3ee",
-                                    }}
-                                  />
-                                </div>
-                                <span className="font-mono-num text-slate-400 text-xs">
-                                  {a.utilizationPct.toFixed(0)}%
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-slate-600 text-xs">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  >
+                    {formatUSD(budgetStats.remaining)}
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
+
+              {budgetStats.totalLoaded > 0 && (
+                <>
+                  <div className="gauge-bar">
+                    <div
+                      className="gauge-fill"
+                      style={{
+                        width: `${Math.min(budgetStats.utilizationPct, 100)}%`,
+                        background: budgetStats.utilizationPct > 100
+                          ? "linear-gradient(90deg, var(--danger), oklch(70% 0.20 25 / 0.7))"
+                          : budgetStats.utilizationPct > 80
+                          ? "linear-gradient(90deg, var(--warn), var(--accent))"
+                          : "linear-gradient(90deg, var(--accent), var(--accent-2))"
+                      }}
+                    />
+                  </div>
+                  <div className="gauge-marks">
+                    <span>{budgetStats.utilizationPct.toFixed(1)}% used</span>
+                    {budgetStats.remaining < 0 && (
+                      <span style={{ color: "var(--danger)" }}>⚠ Spent more than loaded</span>
+                    )}
+                    {budgetStats.remaining >= 0 && budgetStats.utilizationPct > 80 && (
+                      <span style={{ color: "var(--warn)" }}>⚠ {t("Top-up soon — under 20% left")}</span>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {budgetStats.byAccount.length > 0 && (
+                <div className="gauge-by-account">
+                  <div className="gauge-label" style={{ marginBottom: 0 }}>{t("By Account")}</div>
+                  {budgetStats.byAccount.map((a) => (
+                    <div key={a.name} className="gauge-account-row">
+                      <div>
+                        <div className="acct-name">{a.name}</div>
+                      </div>
+                      <span className="num" style={{ color: "var(--good)", fontSize: 12 }}>
+                        {a.loaded > 0 ? formatUSD(a.loaded) : "—"}
+                      </span>
+                      <span className="num" style={{ color: "var(--accent)", fontSize: 12 }}>
+                        {formatUSD(a.spent)}
+                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+                        {a.loaded > 0 ? (
+                          <>
+                            <div className="mini-bar">
+                              <div
+                                className="mini-bar-fill"
+                                style={{
+                                  width: `${Math.min(a.utilizationPct, 100)}%`,
+                                  background: a.utilizationPct > 100
+                                    ? "var(--danger)"
+                                    : a.utilizationPct > 80
+                                    ? "var(--warn)"
+                                    : "var(--accent)"
+                                }}
+                              />
+                            </div>
+                            <span className="acct-pct">{a.utilizationPct.toFixed(0)}%</span>
+                          </>
+                        ) : (
+                          <span className="acct-pct">—</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </article>
         )}
 
         {/* Filters — sticky on scroll, designed for non-technical viewers
             to drill into data with one click. Includes view presets, custom
             date range picker, active-filter chips, and a quick search box. */}
-        <div className="sticky top-0 z-30 -mx-3 sm:-mx-4 md:-mx-8 px-3 sm:px-4 md:px-8 py-3 mb-5 backdrop-blur-xl bg-[#0a0e1a]/85 border-y border-slate-800/40 shadow-lg shadow-black/20">
-          <div className="max-w-7xl mx-auto space-y-2.5">
+        <article className="proto-card" style={{ position: "sticky", top: 46, zIndex: 20, background: "oklch(15% 0.018 240 / 0.92)", backdropFilter: "blur(8px)" }}>
+          <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
 
             {/* Row 1: View presets — one-click answers to common questions */}
             <div className="flex items-center gap-1.5 overflow-x-auto scroll-x flex-nowrap sm:flex-wrap">
@@ -2135,50 +2165,88 @@ export default function MetaSpendDashboard() {
               )}
             </div>
           </div>
-        </div>
+        </article>
 
         {/* Chart */}
-        <div className="glass rounded-2xl p-4 md:p-6 mb-6">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <article className="proto-card">
+          <header className="card-head">
             <div>
-              <h2 className="font-display text-lg font-bold text-white">{lang === "zh" ? `每日${chartMetricMeta[chartMetric].label}趋势` : `Daily ${chartMetricMeta[chartMetric].label} Trend`}</h2>
-              <p className="text-xs text-slate-500 mt-0.5">{rangeFilter === "all" ? t("Last 60 days") : `${t("Last")} ${rangeFilter} ${t("days")}`}</p>
+              <h2>{lang === "zh" ? `每日${chartMetricMeta[chartMetric].label}趋势` : `Daily ${chartMetricMeta[chartMetric].label} Trend`}</h2>
+              <div className="sub">{rangeFilter === "all" ? t("Last 60 days") : `${t("Last")} ${rangeFilter} ${t("days")}`}</div>
             </div>
-            <div className="flex gap-1 bg-slate-900/60 rounded-lg p-1 flex-wrap">
+            <div className="legend">
               {Object.entries(chartMetricMeta).map(([key, m]) => (
-                <button key={key} onClick={() => setChartMetric(key)} className={`px-2.5 py-1 rounded text-xs font-medium ${chartMetric === key ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-300"}`}>{m.label}</button>
+                <button
+                  key={key}
+                  onClick={() => setChartMetric(key)}
+                  className={chartMetric === key ? "on" : ""}
+                >
+                  <span className="sw" style={{ background: m.color }} />
+                  {m.label}
+                </button>
               ))}
             </div>
-          </div>
-          <div className="h-64 md:h-72 -ml-4">
+          </header>
+          <div className="chart-wrap">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={dailySeries}>
                 <defs>
                   <linearGradient id="metricGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={chartMetricMeta[chartMetric].color} stopOpacity={0.5} />
+                    <stop offset="0%" stopColor={chartMetricMeta[chartMetric].color} stopOpacity={0.45} />
                     <stop offset="100%" stopColor={chartMetricMeta[chartMetric].color} stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
-                <XAxis dataKey="label" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={30} />
-                <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false}
+                <CartesianGrid strokeDasharray="2 4" stroke="var(--border-soft)" />
+                <XAxis
+                  dataKey="label"
+                  stroke="var(--muted-2)"
+                  fontSize={9.5}
+                  tickLine={false}
+                  axisLine={{ stroke: "var(--border)" }}
+                  interval="preserveStartEnd"
+                  minTickGap={30}
+                  fontFamily="JetBrains Mono, monospace"
+                />
+                <YAxis
+                  stroke="var(--muted-2)"
+                  fontSize={9.5}
+                  tickLine={false}
+                  axisLine={false}
+                  fontFamily="JetBrains Mono, monospace"
                   tickFormatter={(v) => {
                     if (chartMetric === "spend" || chartMetric === "cpl" || chartMetric === "cpd") return v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`;
                     return formatNumCompact(v);
                   }}
                 />
-                <Tooltip contentStyle={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(148,163,184,0.2)", borderRadius: "8px", fontSize: "12px" }} labelStyle={{ color: "#cbd5e1" }} formatter={(v) => [chartMetricMeta[chartMetric].format(v), chartMetricMeta[chartMetric].label]} />
-                <Area type="monotone" dataKey={chartMetric} stroke={chartMetricMeta[chartMetric].color} strokeWidth={2} fill="url(#metricGrad)" />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--surface-3)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    fontSize: "11px",
+                    fontFamily: "Inter, sans-serif",
+                  }}
+                  labelStyle={{ color: "var(--muted)", fontSize: "10px", letterSpacing: "0.06em", textTransform: "uppercase" }}
+                  itemStyle={{ color: "var(--accent)", fontFamily: "JetBrains Mono, monospace" }}
+                  formatter={(v) => [chartMetricMeta[chartMetric].format(v), chartMetricMeta[chartMetric].label]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey={chartMetric}
+                  stroke={chartMetricMeta[chartMetric].color}
+                  strokeWidth={1.6}
+                  fill="url(#metricGrad)"
+                />
                 {chartMetric === "spend" && config.dailyBudget > 0 && (
                   <ReferenceLine
                     y={config.dailyBudget}
-                    stroke="#facc15"
+                    stroke="var(--warn)"
                     strokeDasharray="4 4"
                     strokeOpacity={0.6}
                     label={{
                       value: `Target ${formatUSDCompact(config.dailyBudget)}`,
                       position: "insideTopRight",
-                      fill: "#facc15",
+                      fill: "var(--warn)",
                       fontSize: 10,
                       fontFamily: "JetBrains Mono, monospace",
                     }}
@@ -2187,82 +2255,93 @@ export default function MetaSpendDashboard() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </article>
 
         {/* Funnel */}
         {(stats.total.impressions > 0 || stats.total.clicks > 0 || stats.total.leads > 0 || stats.total.deposits > 0) && (
-          <div className="glass rounded-2xl p-5 md:p-6 mb-6">
-            <h2 className="font-display text-lg font-bold text-white mb-1">{t("Conversion Funnel")}</h2>
-            <p className="text-xs text-slate-500 mb-5">{rangeFilter === "all" ? t("All-time totals") : `${t("Last")} ${rangeFilter} ${t("days")}`}</p>
-            <Funnel impressions={stats.total.impressions} clicks={stats.total.clicks} leads={stats.total.leads} deposits={stats.total.deposits} ctr={stats.total.ctr} cvr={stats.total.cvr} l2d={stats.total.l2d} />
-          </div>
+          <article className="proto-card">
+            <header className="card-head">
+              <div>
+                <h2>{t("Conversion Funnel")}</h2>
+                <div className="sub">{rangeFilter === "all" ? t("All-time totals") : `${t("Last")} ${rangeFilter} ${t("days")}`}</div>
+              </div>
+            </header>
+            <div style={{ padding: "20px 18px" }}>
+              <Funnel impressions={stats.total.impressions} clicks={stats.total.clicks} leads={stats.total.leads} deposits={stats.total.deposits} ctr={stats.total.ctr} cvr={stats.total.cvr} l2d={stats.total.l2d} />
+            </div>
+          </article>
         )}
 
-        {/* By Geo (full width — most important breakdown) */}
-        <div className="glass rounded-2xl p-5 md:p-6 mb-6">
-          <div className="flex items-center gap-2 mb-1">
-            <Globe className="w-4 h-4 text-emerald-400" />
-            <h2 className="font-display text-lg font-bold text-white">{t("Performance by Country")}</h2>
-          </div>
-          <p className="text-xs text-slate-500 mb-4 flex items-center gap-1.5">
-            Spend, leads, and deposits per market
-            <span className="hidden sm:inline text-slate-600">·</span>
-            <span className="hidden sm:inline text-cyan-400/70">💡 Click any row to filter</span>
-          </p>
-          {byGeo.length === 0 ? (
-            <p className="text-sm text-slate-500 py-8 text-center">No geo data yet</p>
-          ) : (
-            <GeoTable
-              items={byGeo}
-              colors={geoColors}
-              totalSpend={stats.total.spend}
-              activeGeo={geoFilter !== "all" ? geoFilter : null}
-              onRowClick={(name) => setGeoFilter(geoFilter === name ? "all" : name)}
-              t={t}
-            />
-          )}
-        </div>
+        {/* By Country / By Account split — side-by-side breakdown */}
+        <section className="row-2 split-1-1" style={{ gap: 18 }}>
+          {/* By Geo */}
+          <article className="proto-card">
+            <header className="card-head">
+              <div>
+                <h2>{t("Performance by Country")}</h2>
+                <div className="sub">
+                  Spend, leads, and deposits per market · 💡 Click any row to filter
+                </div>
+              </div>
+            </header>
+            <div style={{ padding: "8px 0" }}>
+              {byGeo.length === 0 ? (
+                <p style={{ padding: "32px 18px", textAlign: "center", color: "var(--muted)", fontSize: 13 }}>No geo data yet</p>
+              ) : (
+                <GeoTable
+                  items={byGeo}
+                  colors={geoColors}
+                  totalSpend={stats.total.spend}
+                  activeGeo={geoFilter !== "all" ? geoFilter : null}
+                  onRowClick={(name) => setGeoFilter(geoFilter === name ? "all" : name)}
+                  t={t}
+                />
+              )}
+            </div>
+          </article>
 
-        {/* By Account */}
-        <div className="glass rounded-2xl p-5 md:p-6 mb-6">
-          <h2 className="font-display text-lg font-bold text-white mb-1">{t("By Account")}</h2>
-          <p className="text-xs text-slate-500 mb-4 flex items-center gap-1.5">
-            {t("Account-level split")}
-            <span className="hidden sm:inline text-slate-600">·</span>
-            <span className="hidden sm:inline text-cyan-400/70">💡 Click to filter</span>
-          </p>
-          {byAccount.length === 0 ? (
-            <p className="text-sm text-slate-500 py-8 text-center">No data yet</p>
-          ) : (
-            <BreakdownList
-              items={byAccount}
-              colors={accountColors}
-              totalSpend={stats.total.spend}
-              activeItem={accountFilter !== "all" ? accountFilter : null}
-              onItemClick={(name) => setAccountFilter(accountFilter === name ? "all" : name)}
-            />
-          )}
-        </div>
+          {/* By Account */}
+          <article className="proto-card">
+            <header className="card-head">
+              <div>
+                <h2>{t("By Account")}</h2>
+                <div className="sub">
+                  {t("Account-level split")} · 💡 Click to filter
+                </div>
+              </div>
+            </header>
+            <div style={{ padding: "16px 18px" }}>
+              {byAccount.length === 0 ? (
+                <p style={{ padding: "20px 0", textAlign: "center", color: "var(--muted)", fontSize: 13 }}>No data yet</p>
+              ) : (
+                <BreakdownList
+                  items={byAccount}
+                  colors={accountColors}
+                  totalSpend={stats.total.spend}
+                  activeItem={accountFilter !== "all" ? accountFilter : null}
+                  onItemClick={(name) => setAccountFilter(accountFilter === name ? "all" : name)}
+                />
+              )}
+            </div>
+          </article>
+        </section>
 
         {/* Admin tools — collapsible to reduce clutter for daily monitoring */}
         {isAdmin && (
-          <div className="mb-6">
-            <button
-              onClick={() => setShowAdminPanels(!showAdminPanels)}
-              className="w-full glass rounded-xl px-5 py-3 flex items-center justify-between hover:bg-slate-900/60 transition-colors group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/15 flex items-center justify-center">
-                  <Lock className="w-4 h-4 text-cyan-400" />
-                </div>
-                <div className="text-left">
-                  <div className="text-sm font-semibold text-white">Admin Input</div>
-                  <div className="text-[11px] text-slate-500">Add daily entries · deposits · settings</div>
-                </div>
-              </div>
-              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${showAdminPanels ? "rotate-180" : ""}`} />
-            </button>
-          </div>
+          <button
+            onClick={() => setShowAdminPanels(!showAdminPanels)}
+            className="proto-btn"
+            style={{ width: "100%", padding: "10px 14px", justifyContent: "space-between" }}
+          >
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+              <Lock className="ic" style={{ color: "var(--accent)" }} />
+              <span>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>Admin Input</div>
+                <div style={{ fontSize: 11, color: "var(--muted-2)", fontWeight: 400 }}>Add daily entries · deposits · settings</div>
+              </span>
+            </span>
+            <ChevronDown className="ic" style={{ transform: showAdminPanels ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }} />
+          </button>
         )}
 
         {/* Admin: campaign entry form */}
@@ -2579,21 +2658,21 @@ export default function MetaSpendDashboard() {
         )}
 
         {/* Recent entries table */}
-        <div className="glass rounded-2xl overflow-hidden mb-6">
-          <div className="px-5 md:px-6 py-4 border-b border-slate-800/60 flex items-center justify-between flex-wrap gap-3">
+        <article className="proto-card">
+          <header className="card-head">
             <div>
-              <h2 className="font-display text-lg font-bold text-white">{t("Campaign Entries")}</h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <h2>{t("Campaign Entries")}</h2>
+              <div className="sub">
                 {entriesViewWindow === "all" ? (
                   <>{filteredEntries.length} {filteredEntries.length === 1 ? "entry" : "entries"}</>
                 ) : (
                   <>
                     Showing {visibleEntries.length} of {filteredEntries.length}
-                    {hiddenEntriesCount > 0 && <> · <span className="text-slate-400">{hiddenEntriesCount} older hidden</span></>}
+                    {hiddenEntriesCount > 0 && <> · {hiddenEntriesCount} older hidden</>}
                   </>
                 )}
                 {(accountFilter !== "all" || campaignFilter !== "all" || geoFilter !== "all") && " · filtered"}
-              </p>
+              </div>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               {/* View window pills — 7d default, expand to 30d or all on demand */}
@@ -2657,7 +2736,7 @@ export default function MetaSpendDashboard() {
                 </>
               )}
             </div>
-          </div>
+          </header>
           {filteredEntries.length === 0 ? (
             <div className="p-12 text-center">
               <Calendar className="w-10 h-10 mx-auto text-slate-700 mb-3" />
@@ -2676,22 +2755,22 @@ export default function MetaSpendDashboard() {
             </div>
           ) : (
             <>
-              <div className="hidden md:block overflow-x-auto scroll-x">
-                <table className="w-full text-sm min-w-[1000px]">
+              <div className="hidden md:block" style={{ overflowX: "auto" }}>
+                <table className="proto-table" style={{ minWidth: 1000 }}>
                   <thead>
-                    <tr className="text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800/60">
-                      <th className="px-3 py-3 w-6"></th>
-                      <th className="text-left px-4 py-3 font-medium">{t("Date")}</th>
-                      <th className="text-left px-4 py-3 font-medium">{t("Account")}</th>
-                      <th className="text-left px-4 py-3 font-medium">{t("Campaign")}</th>
-                      <th className="text-left px-4 py-3 font-medium">{t("Geo")}</th>
-                      <th className="text-right px-4 py-3 font-medium">{t("Spend")}</th>
-                      <th className="text-right px-4 py-3 font-medium">{t("IMPR.")}</th>
-                      <th className="text-right px-4 py-3 font-medium">{t("Clicks")}</th>
-                      <th className="text-right px-4 py-3 font-medium">{t("Leads")}</th>
-                      <th className="text-right px-4 py-3 font-medium">{t("CTR")}</th>
-                      <th className="text-right px-4 py-3 font-medium">{t("CPL")}</th>
-                      {isAdmin && <th className="px-4 py-3"></th>}
+                    <tr>
+                      <th style={{ width: 24 }}></th>
+                      <th>{t("Date")}</th>
+                      <th>{t("Account")}</th>
+                      <th>{t("Campaign")}</th>
+                      <th>{t("Geo")}</th>
+                      <th>{t("Spend")}</th>
+                      <th>{t("IMPR.")}</th>
+                      <th>{t("Clicks")}</th>
+                      <th>{t("Leads")}</th>
+                      <th>{t("CTR")}</th>
+                      <th>{t("CPL")}</th>
+                      {isAdmin && <th></th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -2700,79 +2779,75 @@ export default function MetaSpendDashboard() {
                       const ctr = e.impressions > 0 ? ((e.clicks || 0) / e.impressions) * 100 : null;
                       const cpl = e.leads > 0 ? taxedAmount / e.leads : null;
                       // Performance status dot — visual decision aid.
-                      // Green = healthy CPL with leads. Yellow = leads but CPL high (or no leads but low spend).
-                      // Red = significant spend with no leads (likely needs investigation/cut).
                       const cplTarget = config.cplTarget || 15;
-                      let statusColor = "bg-slate-700"; // unknown / not enough data
+                      let dotColor = "var(--muted-2)";
                       if (e.leads > 0) {
-                        if (cpl != null && cpl <= cplTarget) statusColor = "bg-emerald-400";
-                        else if (cpl != null && cpl <= cplTarget * 1.5) statusColor = "bg-amber-400";
-                        else statusColor = "bg-rose-400";
+                        if (cpl != null && cpl <= cplTarget) dotColor = "var(--good)";
+                        else if (cpl != null && cpl <= cplTarget * 1.5) dotColor = "var(--warn)";
+                        else dotColor = "var(--danger)";
                       } else if (taxedAmount >= 50) {
-                        statusColor = "bg-rose-400";
+                        dotColor = "var(--danger)";
                       } else if (taxedAmount > 0) {
-                        statusColor = "bg-amber-400";
+                        dotColor = "var(--warn)";
                       }
                       return (
-                        <tr key={e.id} className="border-b border-slate-800/40 hover:bg-slate-800/20">
-                          <td className="px-3 py-3">
-                            <span className={`inline-block w-2 h-2 rounded-full ${statusColor}`} title={`CPL ${cpl != null ? formatUSD(cpl) : "—"} vs target ${formatUSD(cplTarget)}`}></span>
+                        <tr key={e.id}>
+                          <td>
+                            <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: dotColor }} title={`CPL ${cpl != null ? formatUSD(cpl) : "—"} vs target ${formatUSD(cplTarget)}`}></span>
                           </td>
-                          <td className="px-4 py-3 text-slate-200 font-mono-num text-xs whitespace-nowrap">{formatDate(e.date)}</td>
-                          <td className="px-4 py-3 text-slate-200 text-xs whitespace-nowrap">{e.account}</td>
-                          <td className="px-4 py-3 text-slate-400 text-xs max-w-[280px] truncate" title={e.campaign || ""}>
-                            {e.campaign || <span className="text-slate-700">—</span>}
+                          <td><span className="num" style={{ fontSize: 11.5 }}>{formatDate(e.date)}</span></td>
+                          <td style={{ fontSize: 12 }}>{e.account}</td>
+                          <td style={{ maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--muted)", fontSize: 12 }} title={e.campaign || ""}>
+                            {e.campaign || <span style={{ color: "var(--muted-2)" }}>—</span>}
                           </td>
-                          <td className="px-4 py-3 text-slate-300 text-xs whitespace-nowrap">
-                            {e.geo ? <span><span className="mr-1">{flagFor(e.geo)}</span>{e.geo}</span> : "—"}
+                          <td style={{ fontSize: 12 }}>
+                            {e.geo ? <span><span style={{ marginRight: 4 }}>{flagFor(e.geo)}</span>{e.geo}</span> : "—"}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono-num text-slate-100 font-semibold text-xs">{formatUSD(taxedAmount)}</td>
-                          <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{e.impressions ? formatNumCompact(e.impressions) : "—"}</td>
-                          <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{e.clicks ? formatNumCompact(e.clicks) : "—"}</td>
-                          <td className="px-4 py-3 text-right font-mono-num text-emerald-300 text-xs font-semibold">{e.leads ? formatNumCompact(e.leads) : "—"}</td>
-                          <td className="px-4 py-3 text-right font-mono-num text-slate-400 text-xs">{formatPct(ctr)}</td>
-                          <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">{cpl != null ? formatUSD(cpl) : "—"}</td>
+                          <td><span className="num" style={{ fontWeight: 600 }}>{formatUSD(taxedAmount)}</span></td>
+                          <td><span className="num" style={{ color: "var(--muted)" }}>{e.impressions ? formatNumCompact(e.impressions) : "—"}</span></td>
+                          <td><span className="num" style={{ color: "var(--muted)" }}>{e.clicks ? formatNumCompact(e.clicks) : "—"}</span></td>
+                          <td><span className="num" style={e.leads > 0 ? { color: "var(--good)", fontWeight: 600 } : {}}>{e.leads ? formatNumCompact(e.leads) : "—"}</span></td>
+                          <td><span className="num" style={{ color: "var(--muted)" }}>{formatPct(ctr)}</span></td>
+                          <td><span className="num">{cpl != null ? formatUSD(cpl) : "—"}</span></td>
                           {isAdmin && (
-                            <td className="px-4 py-3"><div className="flex items-center justify-end gap-1">
-                              <button onClick={() => handleEditEntry(e)} className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-cyan-400"><Pencil className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => handleDeleteEntry(e.id)} className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-pink-400"><Trash2 className="w-3.5 h-3.5" /></button>
-                            </div></td>
+                            <td>
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                <button onClick={() => handleEditEntry(e)} className="icon-btn" style={{ width: 24, height: 24 }}><Pencil style={{ width: 12, height: 12 }} /></button>
+                                <button onClick={() => handleDeleteEntry(e.id)} className="icon-btn" style={{ width: 24, height: 24 }}><Trash2 style={{ width: 12, height: 12 }} /></button>
+                              </div>
+                            </td>
                           )}
                         </tr>
                       );
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-slate-900/40">
+                    <tr className="row-total">
                       <td></td>
-                      <td colSpan={4} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400">
+                      <td colSpan={4}>
                         {entriesViewWindow === "all" ? "Period total" : `Last ${entriesViewWindow === "30d" ? "30" : "7"} days total`}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono-num text-cyan-300 font-bold text-xs">
-                        {formatUSD(visibleEntries.reduce((s, e) => s + (e.amount || 0) * (1 + (config.taxRate || 0)), 0))}
+                      <td><span className="num">{formatUSD(visibleEntries.reduce((s, e) => s + (e.amount || 0) * (1 + (config.taxRate || 0)), 0))}</span></td>
+                      <td><span className="num">{formatNumCompact(visibleEntries.reduce((s, e) => s + (e.impressions || 0), 0))}</span></td>
+                      <td><span className="num">{formatNumCompact(visibleEntries.reduce((s, e) => s + (e.clicks || 0), 0))}</span></td>
+                      <td><span className="num">{formatNumCompact(visibleEntries.reduce((s, e) => s + (e.leads || 0), 0))}</span></td>
+                      <td>
+                        <span className="num">
+                          {(() => {
+                            const totalImpr = visibleEntries.reduce((s, e) => s + (e.impressions || 0), 0);
+                            const totalClicks = visibleEntries.reduce((s, e) => s + (e.clicks || 0), 0);
+                            return formatPct(totalImpr > 0 ? (totalClicks / totalImpr) * 100 : null);
+                          })()}
+                        </span>
                       </td>
-                      <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
-                        {formatNumCompact(visibleEntries.reduce((s, e) => s + (e.impressions || 0), 0))}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
-                        {formatNumCompact(visibleEntries.reduce((s, e) => s + (e.clicks || 0), 0))}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono-num text-emerald-300 font-bold text-xs">
-                        {formatNumCompact(visibleEntries.reduce((s, e) => s + (e.leads || 0), 0))}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono-num text-slate-400 text-xs">
-                        {(() => {
-                          const totalImpr = visibleEntries.reduce((s, e) => s + (e.impressions || 0), 0);
-                          const totalClicks = visibleEntries.reduce((s, e) => s + (e.clicks || 0), 0);
-                          return formatPct(totalImpr > 0 ? (totalClicks / totalImpr) * 100 : null);
-                        })()}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono-num text-slate-300 text-xs">
-                        {(() => {
-                          const totalSpendTaxed = visibleEntries.reduce((s, e) => s + (e.amount || 0) * (1 + (config.taxRate || 0)), 0);
-                          const totalLeads = visibleEntries.reduce((s, e) => s + (e.leads || 0), 0);
-                          return totalLeads > 0 ? formatUSD(totalSpendTaxed / totalLeads) : "—";
-                        })()}
+                      <td>
+                        <span className="num">
+                          {(() => {
+                            const totalSpendTaxed = visibleEntries.reduce((s, e) => s + (e.amount || 0) * (1 + (config.taxRate || 0)), 0);
+                            const totalLeads = visibleEntries.reduce((s, e) => s + (e.leads || 0), 0);
+                            return totalLeads > 0 ? formatUSD(totalSpendTaxed / totalLeads) : "—";
+                          })()}
+                        </span>
                       </td>
                       {isAdmin && <td></td>}
                     </tr>
@@ -2815,18 +2890,16 @@ export default function MetaSpendDashboard() {
               </div>
             </>
           )}
-        </div>
+        </article>
 
         {/* Recent deposits table */}
-        <div className="glass rounded-2xl overflow-hidden">
-          <div className="px-5 md:px-6 py-4 border-b border-slate-800/60 flex items-center justify-between flex-wrap gap-3">
+        <article className="proto-card">
+          <header className="card-head">
             <div>
-              <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
-                <Banknote className="w-4 h-4 text-amber-400" /> {t("Daily Deposits")}
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">{filteredDeposits.length} {t("entries")}</p>
+              <h2>{t("Daily Deposits")}</h2>
+              <div className="sub">{filteredDeposits.length} {t("entries")}</div>
             </div>
-          </div>
+          </header>
 
           {/* Quick-add deposit row — admin only, always visible */}
           {isAdmin && (
@@ -2961,17 +3034,17 @@ export default function MetaSpendDashboard() {
               <p className="text-slate-400 text-sm">{deposits.length === 0 ? (isAdmin ? "No deposit data yet — use the quick-add above to add daily counts." : "No deposit data yet.") : "No deposits match the current filter."}</p>
             </div>
           ) : (
-            <div className="overflow-x-auto scroll-x">
-              <table className="w-full text-sm">
+            <div style={{ overflowX: "auto" }}>
+              <table className="proto-table">
                 <thead>
-                  <tr className="text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800/60">
-                    <th className="text-left px-4 py-3 font-medium">{t("Date")}</th>
-                    <th className="text-left px-4 py-3 font-medium">{t("Country")}</th>
-                    <th className="text-left px-4 py-3 font-medium">{t("Source")}</th>
-                    <th className="text-left px-4 py-3 font-medium">CRM ID</th>
-                    <th className="text-right px-4 py-3 font-medium">{t("Deposits")}</th>
-                    <th className="text-right px-4 py-3 font-medium">{t("Amount (USD)")}</th>
-                    {isAdmin && <th className="px-4 py-3"></th>}
+                  <tr>
+                    <th>{t("Date")}</th>
+                    <th>{t("Country")}</th>
+                    <th>{t("Source")}</th>
+                    <th>CRM ID</th>
+                    <th>{t("Deposits")}</th>
+                    <th>{t("Amount (USD)")}</th>
+                    {isAdmin && <th></th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -3172,18 +3245,16 @@ export default function MetaSpendDashboard() {
               </table>
             </div>
           )}
-        </div>
+        </article>
 
         {/* Top-ups table */}
-        <div className="glass rounded-2xl overflow-hidden">
-          <div className="px-5 md:px-6 py-4 border-b border-slate-800/60 flex items-center justify-between">
+        <article className="proto-card">
+          <header className="card-head">
             <div>
-              <h2 className="font-display text-lg font-bold text-white flex items-center gap-2">
-                <Wallet className="w-4 h-4 text-emerald-400" /> {t("Top-ups History")}
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">{topups.length} {t("top-up records")}</p>
+              <h2>{t("Top-ups History")}</h2>
+              <div className="sub">{topups.length} {t("top-up records")}</div>
             </div>
-          </div>
+          </header>
           {topups.length === 0 ? (
             <div className="p-12 text-center">
               <Wallet className="w-10 h-10 mx-auto text-slate-700 mb-3" />
@@ -3192,60 +3263,53 @@ export default function MetaSpendDashboard() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto scroll-x">
-              <table className="w-full text-sm">
+            <div style={{ overflowX: "auto" }}>
+              <table className="proto-table compact-table">
                 <thead>
-                  <tr className="text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800/60">
-                    <th className="text-left px-4 py-3 font-medium">{t("Date")}</th>
-                    <th className="text-left px-4 py-3 font-medium">{t("Account")}</th>
-                    <th className="text-left px-4 py-3 font-medium">{t("Notes")}</th>
-                    <th className="text-right px-4 py-3 font-medium">Amount</th>
-                    {isAdmin && <th className="px-4 py-3"></th>}
+                  <tr>
+                    <th>{t("Date")}</th>
+                    <th>{t("Account")}</th>
+                    <th>{t("Notes")}</th>
+                    <th>Amount</th>
+                    {isAdmin && <th></th>}
                   </tr>
                 </thead>
                 <tbody>
                   {[...topups].sort((a, b) => b.date.localeCompare(a.date)).map((t) => (
-                    <tr key={t.id} className="border-b border-slate-800/40 hover:bg-slate-800/20">
-                      <td className="px-4 py-3 text-slate-200 font-mono-num text-xs whitespace-nowrap">{formatDate(t.date)}</td>
-                      <td className="px-4 py-3 text-slate-200 text-xs">{t.account}</td>
-                      <td className="px-4 py-3 text-slate-400 text-xs max-w-xs truncate">{t.notes || "—"}</td>
-                      <td className="px-4 py-3 text-right font-mono-num text-emerald-300 text-xs font-semibold">
-                        {formatUSD(t.amount)}
-                      </td>
+                    <tr key={t.id}>
+                      <td><span className="num" style={{ fontSize: 11.5 }}>{formatDate(t.date)}</span></td>
+                      <td style={{ fontSize: 12 }}>{t.account}</td>
+                      <td style={{ color: "var(--muted)", fontSize: 12, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.notes || "—"}</td>
+                      <td><span className="num" style={{ color: "var(--good)", fontWeight: 600 }}>{formatUSD(t.amount)}</span></td>
                       {isAdmin && (
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end">
-                            <button onClick={() => handleDeleteTopup(t.id)} className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-pink-400">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                        <td>
+                          <button onClick={() => handleDeleteTopup(t.id)} className="icon-btn" style={{ width: 24, height: 24 }}>
+                            <Trash2 style={{ width: 12, height: 12 }} />
+                          </button>
                         </td>
                       )}
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-slate-900/40">
-                    <td colSpan={3} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-400">
-                      Total loaded
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono-num text-emerald-300 font-bold text-xs">
-                      {formatUSD(topups.reduce((s, t) => s + t.amount, 0))}
-                    </td>
+                  <tr className="row-total">
+                    <td colSpan={3}>Total loaded</td>
+                    <td><span className="num">{formatUSD(topups.reduce((s, t) => s + t.amount, 0))}</span></td>
                     {isAdmin && <td></td>}
                   </tr>
                 </tfoot>
               </table>
             </div>
           )}
-        </div>
+        </article>
 
-        <p className="text-center text-xs text-slate-600 mt-8">
-          {isAdmin ? t("Admin mode · Shared with all viewers") : t("Read-only view · Unlock admin to input data")}
-        </p>
-      </div>
+        {/* Footer */}
+        <footer className="proto-footer">
+          <span>{isAdmin ? t("Admin mode · Shared with all viewers") : t("Read-only view · Unlock admin to input data")}</span>
+          <span>WeTrade · Meta Ads Performance</span>
+        </footer>
 
-      {/* Passcode modal */}
+        {/* Passcode modal */}
       {showPasscodeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="glass rounded-2xl p-6 md:p-8 max-w-sm w-full">
@@ -3295,7 +3359,8 @@ export default function MetaSpendDashboard() {
           geoFilter={geoFilter}
         />
       )}
-    </div>
+      </main>
+    </>
   );
 }
 
@@ -4540,6 +4605,87 @@ function FilterChip({ label, onClear, color = "cyan" }) {
   );
 }
 
+// ─── KpiTile — single tile in the KPI strip (prototype design).
+// Shows: dot + label, big value (mono), delta % WoW with arrow, mini sparkline.
+// Sparkline is rendered inline via SVG path computed from a 14-day series.
+function KpiTile({ label, dotVar, value, delta, sparkSeries, sparkColor }) {
+  // Build a smoothed SVG path for the sparkline. Maps the series into a
+  // 78×24 viewBox with 2px top/bottom padding.
+  const buildSparkPath = (series) => {
+    if (!series || series.length === 0) return "";
+    const w = 78;
+    const h = 24;
+    const max = Math.max(...series, 1);
+    const min = Math.min(...series, 0);
+    const range = max - min || 1;
+    const step = w / Math.max(series.length - 1, 1);
+    return series.map((v, i) => {
+      const x = i * step;
+      const y = h - 2 - ((v - min) / range) * (h - 4);
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+  };
+
+  const path = buildSparkPath(sparkSeries);
+  // Final point coords for the dot at the end of the line
+  const lastIdx = (sparkSeries?.length || 1) - 1;
+  let lastX = 78, lastY = 12;
+  if (sparkSeries && sparkSeries.length > 0) {
+    const max = Math.max(...sparkSeries, 1);
+    const min = Math.min(...sparkSeries, 0);
+    const range = max - min || 1;
+    const step = 78 / Math.max(sparkSeries.length - 1, 1);
+    lastX = lastIdx * step;
+    lastY = 24 - 2 - ((sparkSeries[lastIdx] - min) / range) * 20;
+  }
+
+  // Pick delta visual treatment. null → flat dash, positive → up arrow / good,
+  // negative → down arrow / danger, 0 → flat.
+  let deltaCls = "delta-flat";
+  let deltaIcon = null;
+  let deltaText = "—";
+  if (delta != null && !isNaN(delta) && Math.abs(delta) >= 0.05) {
+    if (delta > 0) {
+      deltaCls = "delta-up";
+      deltaIcon = <svg viewBox="0 0 12 12"><path d="M3 8l3-3 3 3" strokeLinecap="round"/></svg>;
+      deltaText = `+${delta.toFixed(1)}%`;
+    } else {
+      deltaCls = "delta-down";
+      deltaIcon = <svg viewBox="0 0 12 12"><path d="M3 4l3 3 3-3" strokeLinecap="round"/></svg>;
+      deltaText = `${delta.toFixed(1)}%`;
+    }
+  }
+
+  return (
+    <div className="kpi">
+      <div className="kpi-label">
+        <span className="dot" style={{ background: `var(${dotVar})` }} />
+        {label}
+      </div>
+      <div className="kpi-value">{value}</div>
+      <div className="kpi-foot">
+        <span className={`delta ${deltaCls}`}>
+          {deltaIcon}
+          {deltaText}
+        </span>
+        {path && (
+          <svg className="spark" viewBox="0 0 78 24" preserveAspectRatio="none">
+            <path
+              d={path}
+              fill="none"
+              stroke={sparkColor}
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle cx={lastX} cy={lastY} r="1.6" fill={sparkColor} />
+          </svg>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HeroStat({ label, value, sublabel, icon, accent }) {
   const accents = {
     emerald: { glow: "rgba(52,211,153,0.18)", text: "text-emerald-400" },
@@ -4649,20 +4795,20 @@ function Funnel({ impressions, clicks, leads, deposits, ctr, cvr, l2d }) {
 
 function GeoTable({ items, colors, totalSpend, onRowClick, activeGeo, t = (s) => s }) {
   return (
-    <div className="overflow-x-auto scroll-x">
-      <table className="w-full text-sm min-w-[700px]">
+    <div style={{ overflowX: "auto" }}>
+      <table className="proto-table" style={{ minWidth: 700 }}>
         <thead>
-          <tr className="text-[10px] uppercase tracking-[0.15em] text-slate-500 border-b border-slate-800/60">
-            <th className="text-left px-3 py-3 font-medium w-12">#</th>
-            <th className="text-left px-3 py-3 font-medium">{t("Country")}</th>
-            <th className="text-right px-3 py-3 font-medium">{t("Spend")}</th>
-            <th className="text-left px-3 py-3 font-medium">Share</th>
-            <th className="text-right px-3 py-3 font-medium">{t("Leads")}</th>
-            <th className="text-right px-3 py-3 font-medium">{t("CPL")}</th>
-            <th className="text-right px-3 py-3 font-medium">{t("Deposits")}</th>
-            <th className="text-right px-3 py-3 font-medium">{t("Dep $")}</th>
-            <th className="text-right px-3 py-3 font-medium">{t("CPD")}</th>
-            <th className="text-right px-3 py-3 font-medium">{t("L→D")}</th>
+          <tr>
+            <th style={{ width: 36 }}>#</th>
+            <th>{t("Country")}</th>
+            <th>{t("Spend")}</th>
+            <th>Share</th>
+            <th>{t("Leads")}</th>
+            <th>{t("CPL")}</th>
+            <th>{t("Deposits")}</th>
+            <th>{t("Dep $")}</th>
+            <th>{t("CPD")}</th>
+            <th>{t("L→D")}</th>
           </tr>
         </thead>
         <tbody>
@@ -4673,58 +4819,52 @@ function GeoTable({ items, colors, totalSpend, onRowClick, activeGeo, t = (s) =>
               <tr
                 key={a.name}
                 onClick={() => onRowClick && onRowClick(a.name)}
-                className={`border-b border-slate-800/40 transition-colors group ${
-                  onRowClick ? "cursor-pointer" : ""
-                } ${
-                  activeGeo === a.name
-                    ? "bg-cyan-500/10 hover:bg-cyan-500/15"
-                    : "hover:bg-slate-800/30"
-                }`}
+                style={{
+                  cursor: onRowClick ? "pointer" : "default",
+                  background: activeGeo === a.name ? "var(--accent-soft)" : undefined,
+                }}
                 title={onRowClick ? `Click to filter dashboard to ${a.name}` : undefined}
               >
-                <td className="px-3 py-3 text-xs font-mono-num text-slate-600 group-hover:text-slate-400 transition-colors">
-                  {String(i + 1).padStart(2, "0")}
-                </td>
-                <td className="px-3 py-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-xl leading-none">{flagFor(a.name)}</span>
-                    <span className="text-slate-100 text-sm font-medium">{a.name}</span>
+                <td><span className="num" style={{ color: "var(--muted-2)", fontSize: 11 }}>{String(i + 1).padStart(2, "0")}</span></td>
+                <td>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 18, lineHeight: 1 }}>{flagFor(a.name)}</span>
+                    <span style={{ color: "var(--fg-2)", fontWeight: 500 }}>{a.name}</span>
                   </div>
                 </td>
-                <td className="px-3 py-3 text-right font-mono-num text-slate-100 font-bold">
-                  {formatUSDCompact(a.spend)}
-                </td>
-                <td className="px-3 py-3">
-                  <div className="flex items-center gap-2 min-w-[100px]">
-                    <div className="flex-1 h-1.5 bg-slate-900/80 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-700"
-                        style={{ width: `${pct}%`, background: color, boxShadow: `0 0 8px ${color}40` }}
-                      />
+                <td><span className="num" style={{ fontWeight: 600, color: "var(--fg)" }}>{formatUSDCompact(a.spend)}</span></td>
+                <td>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 100, justifyContent: "flex-end" }}>
+                    <div className="country-bar" style={{ flex: 1, maxWidth: 80 }}>
+                      <div className="country-bar-fill" style={{ width: `${pct}%`, background: color }} />
                     </div>
-                    <span className="font-mono-num text-slate-400 text-[10px] w-10 text-right">
+                    <span className="num" style={{ color: "var(--muted)", fontSize: 10.5, minWidth: 38, textAlign: "right" }}>
                       {pct.toFixed(1)}%
                     </span>
                   </div>
                 </td>
-                <td className="px-3 py-3 text-right font-mono-num text-emerald-300 text-xs font-semibold">
-                  {a.leads ? formatNumCompact(a.leads) : "—"}
+                <td>
+                  <span className="num" style={a.leads > 0 ? { color: "var(--good)", fontWeight: 600 } : {}}>
+                    {a.leads ? formatNumCompact(a.leads) : "—"}
+                  </span>
                 </td>
-                <td className="px-3 py-3 text-right font-mono-num text-slate-300 text-xs">
-                  {a.cpl != null ? formatUSDCompact(a.cpl) : "—"}
+                <td><span className="num">{a.cpl != null ? formatUSDCompact(a.cpl) : "—"}</span></td>
+                <td>
+                  <span className="num" style={a.deposits > 0 ? { color: "var(--warn)", fontWeight: 600 } : {}}>
+                    {a.deposits ? formatNumCompact(a.deposits) : "—"}
+                  </span>
                 </td>
-                <td className="px-3 py-3 text-right font-mono-num text-amber-300 text-xs font-bold">
-                  {a.deposits ? formatNumCompact(a.deposits) : "—"}
+                <td>
+                  <span className="num" style={a.depositAmount > 0 ? { color: "var(--good)", fontWeight: 600 } : {}}>
+                    {a.depositAmount > 0 ? formatUSDCompact(a.depositAmount) : "—"}
+                  </span>
                 </td>
-                <td className="px-3 py-3 text-right font-mono-num text-emerald-300 text-xs font-semibold">
-                  {a.depositAmount > 0 ? formatUSDCompact(a.depositAmount) : "—"}
+                <td>
+                  <span className="num" style={a.cpd != null ? { color: "var(--accent)" } : {}}>
+                    {a.cpd != null ? formatUSDCompact(a.cpd) : "—"}
+                  </span>
                 </td>
-                <td className="px-3 py-3 text-right font-mono-num text-cyan-300 text-xs font-semibold">
-                  {a.cpd != null ? formatUSDCompact(a.cpd) : "—"}
-                </td>
-                <td className="px-3 py-3 text-right font-mono-num text-slate-400 text-xs">
-                  {formatPct(a.l2d)}
-                </td>
+                <td><span className="num" style={{ color: "var(--muted)" }}>{formatPct(a.l2d)}</span></td>
               </tr>
             );
           })}
@@ -4736,7 +4876,7 @@ function GeoTable({ items, colors, totalSpend, onRowClick, activeGeo, t = (s) =>
 
 function BreakdownList({ items, colors, totalSpend, onItemClick, activeItem }) {
   return (
-    <div className="space-y-3">
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {items.map((a, i) => {
         const pct = totalSpend > 0 ? (a.spend / totalSpend) * 100 : 0;
         const color = colors[i % colors.length];
@@ -4746,24 +4886,31 @@ function BreakdownList({ items, colors, totalSpend, onItemClick, activeItem }) {
           <div
             key={a.name}
             onClick={() => onItemClick && onItemClick(a.name)}
-            className={`-mx-2 px-2 py-1.5 rounded-lg transition-colors ${
-              isClickable ? "cursor-pointer hover:bg-slate-800/40" : ""
-            } ${isActive ? "bg-cyan-500/10 ring-1 ring-cyan-500/30" : ""}`}
+            style={{
+              padding: "8px 10px",
+              borderRadius: 6,
+              cursor: isClickable ? "pointer" : "default",
+              background: isActive ? "var(--accent-soft)" : "transparent",
+              border: isActive ? "1px solid oklch(80% 0.13 200 / 0.32)" : "1px solid transparent",
+              transition: "background 0.12s, border-color 0.12s",
+            }}
+            onMouseEnter={(e) => { if (isClickable && !isActive) e.currentTarget.style.background = "oklch(22% 0.02 240 / 0.4)"; }}
+            onMouseLeave={(e) => { if (isClickable && !isActive) e.currentTarget.style.background = "transparent"; }}
             title={isClickable ? `Click to filter to ${a.name}` : undefined}
           >
-            <div className="flex items-center justify-between text-sm mb-1.5">
-              <div className="flex items-center gap-2 min-w-0 pr-2">
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-                <span className="text-slate-200 truncate">{a.name}</span>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, paddingRight: 8 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                <span style={{ color: "var(--fg-2)", fontSize: 12.5, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.name}</span>
               </div>
-              <span className="font-mono-num text-slate-300 text-xs whitespace-nowrap">{formatUSDCompact(a.spend)}</span>
+              <span className="num" style={{ color: "var(--fg)", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>{formatUSDCompact(a.spend)}</span>
             </div>
-            <div className="h-1.5 bg-slate-800/60 rounded-full overflow-hidden mb-1.5">
-              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+            <div className="country-bar" style={{ marginBottom: 6 }}>
+              <div className="country-bar-fill" style={{ width: `${pct}%`, background: color }} />
             </div>
-            <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono-num">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 10.5, color: "var(--muted-2)", fontFamily: "var(--font-mono)" }}>
               <span>{pct.toFixed(1)}%</span>
-              <div className="flex items-center gap-3">
+              <div style={{ display: "flex", gap: 12 }}>
                 <span>Leads {formatNumCompact(a.leads)}</span>
                 <span>CPL {a.cpl != null ? formatUSDCompact(a.cpl) : "—"}</span>
               </div>
