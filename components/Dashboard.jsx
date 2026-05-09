@@ -213,6 +213,7 @@ const TRANSLATIONS = {
     "LIVE · META ADS PERFORMANCE": "实时 · META 广告表现",
     "Performance": "表现",
     "Search campaigns, accounts…": "搜索广告系列、账户…",
+    "Clear search": "清除搜索",
     "Time period": "时间段",
     "Viewer": "查看者",
     "Updated just now": "刚刚更新",
@@ -733,6 +734,23 @@ export default function MetaSpendDashboard() {
   const [showCustomRange, setShowCustomRange] = useState(false);
   // Quick search bar — natural language filter input
   const [quickSearch, setQuickSearch] = useState("");
+  const searchInputRef = useRef(null);
+  // ⌘K (Mac) / Ctrl+K (Win/Linux) → focus the global search input.
+  // Escape clears the search and blurs the input.
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      } else if (e.key === "Escape" && document.activeElement === searchInputRef.current) {
+        setQuickSearch("");
+        searchInputRef.current?.blur();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const [chartMetric, setChartMetric] = useState("spend");
 
   const [, setTick] = useState(0);
@@ -1267,8 +1285,18 @@ export default function MetaSpendDashboard() {
     if (accountFilter !== "all") list = list.filter((e) => e.account === accountFilter);
     if (campaignFilter !== "all") list = list.filter((e) => e.campaign === campaignFilter);
     if (geoFilter !== "all") list = list.filter((e) => e.geo === geoFilter);
+    // Global search — case-insensitive match against campaign, account, or geo.
+    // Composes with other filters; user can stack "Brazil" + "Q4 promo" etc.
+    const q = quickSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((e) =>
+        (e.campaign || "").toLowerCase().includes(q) ||
+        (e.account || "").toLowerCase().includes(q) ||
+        (e.geo || "").toLowerCase().includes(q)
+      );
+    }
     return list.sort((a, b) => b.date.localeCompare(a.date));
-  }, [entries, rangeFilter, accountFilter, campaignFilter, geoFilter, customStart, customEnd]);
+  }, [entries, rangeFilter, accountFilter, campaignFilter, geoFilter, customStart, customEnd, quickSearch]);
 
   // Campaign Entries table view — slice to the chosen rolling window.
   // Keeps the table digestible by default (7d) while letting the user expand on demand.
@@ -1288,8 +1316,17 @@ export default function MetaSpendDashboard() {
   const filteredDeposits = useMemo(() => {
     let list = deposits.filter((d) => inActiveRange(d.date));
     if (geoFilter !== "all") list = list.filter((d) => d.geo === geoFilter);
+    // Global search — case-insensitive match against geo, source, or crmId.
+    const q = quickSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((d) =>
+        (d.geo || "").toLowerCase().includes(q) ||
+        (d.source || "").toLowerCase().includes(q) ||
+        (d.crmId || "").toLowerCase().includes(q)
+      );
+    }
     return list.sort((a, b) => b.date.localeCompare(a.date));
-  }, [deposits, rangeFilter, geoFilter, customStart, customEnd]);
+  }, [deposits, rangeFilter, geoFilter, customStart, customEnd, quickSearch]);
 
   // Multi-period summary stats — independent of the date range filter so the
   // summary table can show Today / 7D / 30D / MTD / All-time side by side.
@@ -1637,13 +1674,37 @@ export default function MetaSpendDashboard() {
           </span>
         </div>
 
-        {/* Search is decorative for now — wired to no real search engine yet.
-            ⌘K shortcut is a hint to the user that this is the convention. */}
-        <div className="glob-search" role="search" aria-label="Search">
+        {/* Global search — filters Campaign Entries, Daily Deposits, and
+            Top-ups tables by text match against campaign / account / geo /
+            source / CRM ID / notes. Composes with other filters.
+            ⌘K (or Ctrl+K) focuses; Escape clears + blurs. */}
+        <label
+          className="glob-search"
+          aria-label={t("Search campaigns, accounts…")}
+          onClick={() => searchInputRef.current?.focus()}
+        >
           <svg className="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-          <span>{t("Search campaigns, accounts…")}</span>
-          <span className="kbd">⌘K</span>
-        </div>
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={quickSearch}
+            onChange={(e) => setQuickSearch(e.target.value)}
+            placeholder={t("Search campaigns, accounts…")}
+            spellCheck={false}
+            autoComplete="off"
+          />
+          {quickSearch ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setQuickSearch(""); searchInputRef.current?.focus(); }}
+              className="glob-search-clear"
+              title={t("Clear search")}
+              aria-label={t("Clear search")}
+            >×</button>
+          ) : (
+            <span className="kbd">⌘K</span>
+          )}
+        </label>
 
         <div className="topbar-spacer"></div>
 
@@ -3275,21 +3336,31 @@ export default function MetaSpendDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...topups].sort((a, b) => b.date.localeCompare(a.date)).map((t) => (
-                    <tr key={t.id}>
-                      <td><span className="num" style={{ fontSize: 11.5 }}>{formatDate(t.date)}</span></td>
-                      <td style={{ fontSize: 12 }}>{t.account}</td>
-                      <td style={{ color: "var(--muted)", fontSize: 12, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.notes || "—"}</td>
-                      <td><span className="num" style={{ color: "var(--good)", fontWeight: 600 }}>{formatUSD(t.amount)}</span></td>
+                  {(() => {
+                    // Apply global search to topups (account + notes match)
+                    const q = quickSearch.trim().toLowerCase();
+                    const list = q
+                      ? topups.filter((tp) =>
+                          (tp.account || "").toLowerCase().includes(q) ||
+                          (tp.notes || "").toLowerCase().includes(q)
+                        )
+                      : topups;
+                    return [...list].sort((a, b) => b.date.localeCompare(a.date)).map((tp) => (
+                    <tr key={tp.id}>
+                      <td><span className="num" style={{ fontSize: 11.5 }}>{formatDate(tp.date)}</span></td>
+                      <td style={{ fontSize: 12 }}>{tp.account}</td>
+                      <td style={{ color: "var(--muted)", fontSize: 12, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tp.notes || "—"}</td>
+                      <td><span className="num" style={{ color: "var(--good)", fontWeight: 600 }}>{formatUSD(tp.amount)}</span></td>
                       {isAdmin && (
                         <td>
-                          <button onClick={() => handleDeleteTopup(t.id)} className="icon-btn" style={{ width: 24, height: 24 }}>
+                          <button onClick={() => handleDeleteTopup(tp.id)} className="icon-btn" style={{ width: 24, height: 24 }}>
                             <Trash2 style={{ width: 12, height: 12 }} />
                           </button>
                         </td>
                       )}
                     </tr>
-                  ))}
+                  ));
+                  })()}
                 </tbody>
                 <tfoot>
                   <tr className="row-total">
