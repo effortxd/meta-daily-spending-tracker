@@ -84,11 +84,14 @@ body { min-height: 100vh; }
   text-transform: uppercase;
   font-weight: 500;
   white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 0;
 }
 .crumb .live-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
+  flex-shrink: 0;
   background: var(--good);
   box-shadow: 0 0 0 4px oklch(76% 0.17 150 / 0.18);
   animation: livePulse 1.6s ease-in-out infinite;
@@ -103,6 +106,7 @@ body { min-height: 100vh; }
 .glob-search {
   flex: 1;
   max-width: 320px;
+  min-width: 0;
   height: 28px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -115,10 +119,19 @@ body { min-height: 100vh; }
   color: var(--muted);
   cursor: pointer;
   transition: border-color 0.12s;
+  overflow: hidden;
 }
 .glob-search:hover { border-color: var(--muted-2); }
+.glob-search > span:not(.kbd) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .glob-search .kbd {
   margin-left: auto;
+  flex-shrink: 0;
   font-family: var(--font-mono);
   font-size: 10px;
   padding: 1px 5px;
@@ -128,6 +141,20 @@ body { min-height: 100vh; }
 }
 .topbar-spacer { flex: 1; }
 .topbar-actions { display: flex; align-items: center; gap: 6px; }
+
+/* Tiny stroked icon used inside the topbar (search icon, chevrons, etc.).
+   This pairs with bare <svg className="ic"> elements; lucide-react icons
+   from React have their own sizing and shouldn't use this class. */
+.ic {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 /* Segmented control — reused for language toggle, quick-view tabs, etc. */
 .seg {
