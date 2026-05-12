@@ -493,11 +493,22 @@ const formatPct = (n, digits = 2) => {
   if (n == null || isNaN(n) || !isFinite(n)) return "—";
   return n.toFixed(digits) + "%";
 };
-const todayISO = () => new Date().toISOString().slice(0, 10);
+// Return today's date as YYYY-MM-DD in the browser's local timezone.
+// Using toISOString().slice(0,10) is WRONG — that returns UTC date, so users
+// east of UTC see "yesterday" early morning and users west of UTC see
+// "tomorrow" late evening. Build the string from local date components
+// instead so "today" matches what the user sees on their wall clock.
+const localISO = (d) => {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+const todayISO = () => localISO(new Date());
 const daysAgoISO = (n) => {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return localISO(d);
 };
 const formatDate = (iso) => {
   const d = new Date(iso + "T00:00:00");
@@ -540,7 +551,7 @@ function parseDate(str) {
     return `${y}-${String(aN).padStart(2, "0")}-${String(bN).padStart(2, "0")}`;
   }
   const d = new Date(s);
-  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  if (!isNaN(d.getTime())) return localISO(d);
   return null;
 }
 
@@ -1307,7 +1318,7 @@ export default function MetaSpendDashboard() {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days + 1); // inclusive: today counts as day 1
     cutoff.setHours(0, 0, 0, 0);
-    const cutoffISO = cutoff.toISOString().slice(0, 10);
+    const cutoffISO = localISO(cutoff);
     return filteredEntries.filter((e) => e.date >= cutoffISO);
   }, [filteredEntries, entriesViewWindow]);
   const hiddenEntriesCount = filteredEntries.length - visibleEntries.length;
@@ -1611,8 +1622,9 @@ export default function MetaSpendDashboard() {
         // Prior is same-day-of-month range from the previous month
         const prevMonthDate = new Date(today + "T00:00:00");
         prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
-        const prevMonthStart = prevMonthDate.toISOString().slice(0, 7) + "-01";
-        const prevMonthSameDay = prevMonthDate.toISOString().slice(0, 10);
+        const prevMonthLocal = localISO(prevMonthDate);
+        const prevMonthStart = prevMonthLocal.slice(0, 7) + "-01";
+        const prevMonthSameDay = prevMonthLocal;
         current = aggregate(filterRange(entriesScoped, monthStart), filterRange(depositsScoped, monthStart), config.taxRate);
         prior = aggregate(filterRange(entriesScoped, prevMonthStart, prevMonthSameDay), filterRange(depositsScoped, prevMonthStart, prevMonthSameDay), config.taxRate);
         label = t("Month to date");
@@ -1814,7 +1826,9 @@ export default function MetaSpendDashboard() {
                 {new Date().toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
               </span>
               <span className="pip" style={{ color: "var(--muted-2)" }}>·</span>
-              <span className="pip">{t("Updated")} {timeAgo(config.lastUpdated, lang)}</span>
+              <span className="pip" title={`Your timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`}>
+                {t("Updated")} {timeAgo(config.lastUpdated, lang)}
+              </span>
               {(config.taxRate || 0) > 0 && (
                 <span className="pill-warn-inline">
                   {t("Spend incl.")} {((config.taxRate || 0) * 100).toFixed(0)}% {t("tax")}
@@ -4123,7 +4137,8 @@ function ReceiptModal({ onClose, onGenerate, accounts, defaultAccount, entries, 
   const today = new Date();
   const fourteenAgo = new Date(today);
   fourteenAgo.setDate(today.getDate() - 14);
-  const isoDate = (d) => d.toISOString().slice(0, 10);
+  // Use local date components — avoids the UTC slice off-by-one near midnight
+  const isoDate = (d) => localISO(d);
 
   const [startDate, setStartDate] = useState(isoDate(fourteenAgo));
   const [endDate, setEndDate] = useState(isoDate(today));

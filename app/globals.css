@@ -857,22 +857,155 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) opacit
 .wrap > *:nth-child(5) { animation-delay: 0.18s; }
 .wrap > *:nth-child(6) { animation-delay: 0.22s; }
 
-/* Responsive */
+/* ───────────────────────────────────────────────────────────
+   RESPONSIVE
+   Breakpoints: 1200px = desktop → tablet, 880px = tablet → phone-large,
+   560px = phone-large → phone-small. The dashboard is data-dense, so we
+   aggressively collapse multi-column layouts, hide non-essential top-bar
+   controls on small screens, and reduce padding to maximize content area.
+─────────────────────────────────────────────────────────── */
 @media (max-width: 1200px) {
   .kpi-strip { grid-template-columns: repeat(3, 1fr); }
   .kpi:nth-child(3n) { border-right: 0; }
   .kpi:nth-child(n+4) { border-top: 1px solid var(--border); }
   .split-7-3, .split-6-4, .split-1-1 { grid-template-columns: 1fr; }
-  .split-1-1 > div:first-child { border-right: 0 !important; border-bottom: 1px solid var(--border); }
+  .split-1-1 > div:first-child {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--border);
+  }
+  .wrap { padding: 18px 16px 50px; }
 }
-@media (max-width: 720px) {
+
+@media (max-width: 880px) {
+  /* Topbar: tighten spacing, hide search behind ⌘K (still focusable via
+     keyboard if external keyboard present), and shrink the breadcrumb. */
+  .topbar { padding: 0 12px; gap: 8px; height: 44px; }
+  .crumb { font-size: 10px; gap: 6px; letter-spacing: 0.06em; }
+  .crumb .sep { font-size: 8px; }
+  /* Hide everything in the breadcrumb after "LIVE" except the active page */
+  .crumb > span:not(.live-dot):not(.crumb-on) { display: none; }
+  .crumb .live-dot { display: inline-block; }
+
+  /* Avatar circle is decorative — drop it to save space */
+  .avatar-circle { display: none; }
+  /* Language toggle is important enough to keep, but it gets a tighter pad */
+  .seg button { padding: 5px 7px; }
+
+  /* Page head: stack vertically, fully left-aligned */
+  .page-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  h1.title { font-size: 24px; }
+  .period-tabs {
+    align-self: stretch;
+    -webkit-overflow-scrolling: touch;
+  }
+  .period-tabs button { padding: 6px 10px; font-size: 11px; }
+
+  /* KPI strip: 2 columns */
   .kpi-strip { grid-template-columns: 1fr 1fr; }
-  .kpi { border-right: 1px solid var(--border) !important; }
+  .kpi { border-right: 1px solid var(--border) !important; padding: 12px 14px 14px; }
   .kpi:nth-child(2n) { border-right: 0 !important; }
   .kpi:nth-child(n+3) { border-top: 1px solid var(--border); }
-  h1.title { font-size: 24px; }
-  .page-head { flex-direction: column; align-items: flex-start; gap: 12px; }
-  .topbar .glob-search { display: none; }
-  .topbar { padding: 0 14px; gap: 8px; }
-  .crumb { font-size: 10px; }
+  .kpi-value { font-size: 20px; }
+  .kpi-foot { gap: 6px; }
+  .spark { width: 56px; }
+
+  /* Cards: tighten padding & header */
+  .card-head {
+    padding: 11px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .card-head h2 { font-size: 12.5px; }
+  .card-head .sub { font-size: 10.5px; }
+  .card-head .right { flex-wrap: wrap; }
+
+  /* Tables: reduce cell padding so more columns fit before horizontal scroll */
+  .proto-table th, .proto-table td { padding: 8px 10px; }
+  .proto-table th {
+    font-size: 9.5px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  /* Country row: switch to a flowed mini layout — too cramped as a grid */
+  .country-row {
+    grid-template-columns: 22px 28px minmax(0, 1fr) 70px;
+    gap: 8px;
+    padding: 9px 14px;
+    font-size: 11.5px;
+  }
+  /* Hide some columns inside country-row at this size */
+  .country-row > *:nth-child(n+5) { display: none; }
+
+  /* Gauge stat row: stack on phone — three side-by-side stats become tight */
+  .gauge-row { flex-direction: column; gap: 12px; }
+  .gauge-stat { display: flex; justify-content: space-between; align-items: baseline; }
+  .gauge-stat .gauge-label { margin-bottom: 0; }
+
+  /* By-account row: hide the mini-bar column when tight, keep numbers */
+  .gauge-account-row {
+    grid-template-columns: 1fr auto auto;
+    font-size: 11.5px;
+  }
+  .gauge-account-row .mini-bar { display: none; }
+
+  /* Filter card sticky: push down so it doesn't sit under a tall topbar awkwardly */
+  .wrap { padding: 14px 12px 40px; gap: 14px; }
+
+  /* Footer: stack lines */
+  .proto-footer { flex-direction: column; align-items: flex-start; gap: 6px; }
+}
+
+@media (max-width: 560px) {
+  /* Smallest phones: single column KPIs */
+  .kpi-strip { grid-template-columns: 1fr; }
+  .kpi { border-right: 0 !important; border-top: 1px solid var(--border); }
+  .kpi:first-child { border-top: 0; }
+  .kpi-value { font-size: 22px; }
+  .spark { width: 70px; }
+  .kpi-foot { gap: 10px; }
+
+  /* Topbar: only LIVE pill + lang toggle + admin/refresh actions remain.
+     Hide Import / Bulk delete labels — they're admin-rare. */
+  .topbar { padding: 0 10px; gap: 6px; }
+  .proto-btn span { display: none; }
+  /* Show only the icon-button equivalents. Keep the Admin button label tho — */
+  .proto-btn { padding: 5px 7px; }
+
+  /* Page head spacing */
+  .wrap { padding: 12px 10px 36px; gap: 12px; }
+  h1.title { font-size: 22px; }
+
+  /* Tables: extra-tight */
+  .proto-table th, .proto-table td { padding: 7px 8px; font-size: 11.5px; }
+  .proto-table th { font-size: 9px; letter-spacing: 0.06em; }
+
+  /* Card head padding */
+  .card-head { padding: 10px 12px; }
+
+  /* Hide kbd hint in search (real estate is precious) */
+  .glob-search .kbd { display: none; }
+}
+
+/* Mobile-only: keep the search bar visible but compact so it remains
+   discoverable. Desktop has a 320px max-width — phones get a smaller cap. */
+@media (max-width: 880px) {
+  .glob-search { max-width: 200px; height: 26px; padding: 0 8px; font-size: 11.5px; }
+  .glob-search input { font-size: 11.5px; }
+}
+@media (max-width: 560px) {
+  /* On the smallest phones, the search bar wins over the breadcrumb.
+     We let it grow to fill available space and shorten everything else. */
+  .glob-search { max-width: none; flex: 1; }
+}
+
+/* Sticky filter card needs different offset on mobile because the topbar
+   itself shrinks. The article uses inline `style={{ top: 46 }}` from JSX —
+   override here so we don't have to thread mobile state through React. */
+@media (max-width: 880px) {
+  .wrap article[style*="top: 46"] { top: 44px !important; }
 }
