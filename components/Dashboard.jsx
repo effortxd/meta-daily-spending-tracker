@@ -4,7 +4,7 @@ import {
   Calendar, X, Check, Filter, DollarSign, Lock, LogOut, Target,
   Activity, RefreshCw, Globe, MousePointerClick, Eye, Users,
   ChevronDown, ClipboardPaste, FileSpreadsheet, FileText, ImageIcon, Sparkles,
-  AlertCircle, Wallet, Banknote,
+  AlertCircle, Wallet, Banknote, Mail,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine,
@@ -1721,6 +1721,16 @@ export default function MetaSpendDashboard() {
         <div className="topbar-spacer"></div>
 
         <div className="topbar-actions">
+          <a
+            href="/email-marketing"
+            className="proto-btn"
+            style={{ textDecoration: "none" }}
+            title={t("Email Marketing")}
+          >
+            <Mail className="ic" />
+            <span>{t("Email")}</span>
+          </a>
+
           {/* Language toggle — EN / 中文 segmented control */}
           <div className="seg" role="tablist" aria-label="Language">
             <button className={lang === "en" ? "on" : ""} onClick={() => setLang("en")}>EN</button>
