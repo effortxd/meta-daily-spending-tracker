@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
-  Plus, Trash2, Pencil, Download, Upload, TrendingUp, TrendingDown,
-  Calendar, X, Check, Filter, DollarSign, Lock, LogOut, Target,
-  Activity, RefreshCw, Globe, MousePointerClick, Eye, Users,
+  Plus, Trash2, Pencil, Download, Upload,
+  Calendar, X, Check, Filter, Lock, LogOut, Target,
+  Activity, RefreshCw, MousePointerClick, Eye, Users,
   ChevronDown, ClipboardPaste, FileSpreadsheet, FileText, ImageIcon, Sparkles,
   AlertCircle, Wallet, Banknote,
 } from "lucide-react";
@@ -813,7 +813,10 @@ export default function MetaSpendDashboard() {
     // Add any geos that have deposits on this date but aren't in active list
     const newGeos = Object.keys(existing).filter((g) => !activeGeos.includes(g));
     if (newGeos.length) setActiveGeos((prev) => [...prev, ...newGeos]);
-  }, [depositDate, deposits.length]);
+    // Depend on the full `deposits` array (not just its length) so inline edits
+    // to an existing date's counts — which don't change the array length —
+    // still refresh the admin form to the saved values.
+  }, [depositDate, deposits]);
 
   const persistEntries = async (next) => {
     const newConfig = { ...config, lastUpdated: new Date().toISOString() };
@@ -1198,9 +1201,14 @@ export default function MetaSpendDashboard() {
         cpl === "" ? "" : cpl.toFixed(2), `"${(e.notes || "").replace(/"/g, '""')}"`,
       ];
     });
-    const depHeader = ["Date", "Geo", "Deposits"];
+    const depHeader = ["Date", "Geo", "Deposits", "Amount (USD)", "Source", "CRM ID"];
     const depRows = [...deposits].sort((a, b) => a.date.localeCompare(b.date)).map((d) => [
-      d.date, `"${(d.geo || "").replace(/"/g, '""')}"`, d.count,
+      d.date,
+      `"${(d.geo || "").replace(/"/g, '""')}"`,
+      d.count,
+      d.amount ? d.amount.toFixed(2) : "",
+      `"${(d.source || "").replace(/"/g, '""')}"`,
+      `"${(d.crmId || "").replace(/"/g, '""')}"`,
     ]);
     const csv =
       "# Campaign Entries\n" +
@@ -1251,13 +1259,6 @@ export default function MetaSpendDashboard() {
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
   }, [showExportMenu]);
-
-  // Date formatters used by the PDF for human-readable headers
-  const formatReceiptDate = (iso) => {
-    const d = new Date(iso + "T00:00:00");
-    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-  };
-  const formatReceiptDateLong = formatReceiptDate;
 
   const allAccounts = useMemo(
     () => Array.from(new Set(entries.map((e) => e.account).filter(Boolean))),
@@ -1481,10 +1482,24 @@ export default function MetaSpendDashboard() {
   }, [filteredEntries, filteredDeposits, config.taxRate]);
 
   const dailySeries = useMemo(() => {
-    const days = parseInt(rangeFilter === "all" ? "60" : rangeFilter, 10);
     const map = new Map();
-    for (let i = days - 1; i >= 0; i--) {
-      map.set(daysAgoISO(i), { spend: 0, impressions: 0, clicks: 0, leads: 0, deposits: 0 });
+    if (activeRange.isCustom && activeRange.start) {
+      // Custom range active: build one bucket per day from start→end (inclusive)
+      // so the chart matches the rest of the page instead of falling back to a
+      // fixed trailing window. Capped at ~2 years to avoid pathological ranges.
+      const cursor = new Date(activeRange.start + "T00:00:00");
+      const end = new Date((activeRange.end || todayISO()) + "T00:00:00");
+      let guard = 0;
+      while (cursor <= end && guard < 732) {
+        map.set(localISO(cursor), { spend: 0, impressions: 0, clicks: 0, leads: 0, deposits: 0 });
+        cursor.setDate(cursor.getDate() + 1);
+        guard++;
+      }
+    } else {
+      const days = parseInt(rangeFilter === "all" ? "60" : rangeFilter, 10);
+      for (let i = days - 1; i >= 0; i--) {
+        map.set(daysAgoISO(i), { spend: 0, impressions: 0, clicks: 0, leads: 0, deposits: 0 });
+      }
     }
     filteredEntries.forEach((e) => {
       if (map.has(e.date)) {
@@ -1509,7 +1524,7 @@ export default function MetaSpendDashboard() {
         cpl: parseFloat(cpl.toFixed(2)), cpd: parseFloat(cpd.toFixed(2)),
       };
     });
-  }, [filteredEntries, filteredDeposits, rangeFilter, config.taxRate]);
+  }, [filteredEntries, filteredDeposits, rangeFilter, activeRange, config.taxRate]);
 
   const byAccount = useMemo(() => {
     const map = new Map();
@@ -1546,6 +1561,15 @@ export default function MetaSpendDashboard() {
 
   const budgetPct = config.dailyBudget > 0 ? Math.min((stats.today.spend / config.dailyBudget) * 100, 200) : null;
   const budgetStatus = budgetPct == null ? null : budgetPct < 80 ? "under" : budgetPct <= 110 ? "on" : "over";
+
+  // Human-readable label for the active date window. Used by the chart and
+  // funnel subtitles so they describe a custom range instead of always saying
+  // "Last N days" when a custom start/end is in effect.
+  const customRangeLabel = (customStart && customEnd)
+    ? (customStart === customEnd
+        ? formatShortDate(customStart)
+        : `${formatShortDate(customStart)} → ${formatShortDate(customEnd)}`)
+    : "";
 
   const chartMetricMeta = {
     spend: { label: t("Spend"), color: "#22d3ee", format: formatUSD },
@@ -1619,12 +1643,19 @@ export default function MetaSpendDashboard() {
         break;
       case "mtd": {
         const monthStart = today.slice(0, 7) + "-01";
-        // Prior is same-day-of-month range from the previous month
-        const prevMonthDate = new Date(today + "T00:00:00");
-        prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
-        const prevMonthLocal = localISO(prevMonthDate);
-        const prevMonthStart = prevMonthLocal.slice(0, 7) + "-01";
-        const prevMonthSameDay = prevMonthLocal;
+        // Prior is the same-day-of-month range from the previous month.
+        // Build it from explicit year/month/day components rather than
+        // Date.setMonth(-1): on e.g. the 31st, setMonth would overflow a short
+        // previous month (Feb has no 31st) and land in the wrong month. Clamp
+        // the day to the previous month's last valid day instead.
+        const cur = new Date(today + "T00:00:00");
+        const prevMonthFirst = new Date(cur.getFullYear(), cur.getMonth() - 1, 1);
+        const prevYear = prevMonthFirst.getFullYear();
+        const prevMonth = prevMonthFirst.getMonth();
+        const lastDayPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
+        const clampedDay = Math.min(cur.getDate(), lastDayPrevMonth);
+        const prevMonthStart = localISO(prevMonthFirst);
+        const prevMonthSameDay = localISO(new Date(prevYear, prevMonth, clampedDay));
         current = aggregate(filterRange(entriesScoped, monthStart), filterRange(depositsScoped, monthStart), config.taxRate);
         prior = aggregate(filterRange(entriesScoped, prevMonthStart, prevMonthSameDay), filterRange(depositsScoped, prevMonthStart, prevMonthSameDay), config.taxRate);
         label = t("Month to date");
@@ -2247,7 +2278,7 @@ export default function MetaSpendDashboard() {
           <header className="card-head">
             <div>
               <h2>{lang === "zh" ? `每日${chartMetricMeta[chartMetric].label}趋势` : `Daily ${chartMetricMeta[chartMetric].label} Trend`}</h2>
-              <div className="sub">{rangeFilter === "all" ? t("Last 60 days") : `${t("Last")} ${rangeFilter} ${t("days")}`}</div>
+              <div className="sub">{customRangeLabel || (rangeFilter === "all" ? t("Last 60 days") : `${t("Last")} ${rangeFilter} ${t("days")}`)}</div>
             </div>
             <div className="legend">
               {Object.entries(chartMetricMeta).map(([key, m]) => (
@@ -2338,7 +2369,7 @@ export default function MetaSpendDashboard() {
             <header className="card-head">
               <div>
                 <h2>{t("Conversion Funnel")}</h2>
-                <div className="sub">{rangeFilter === "all" ? t("All-time totals") : `${t("Last")} ${rangeFilter} ${t("days")}`}</div>
+                <div className="sub">{customRangeLabel || (rangeFilter === "all" ? t("All-time totals") : `${t("Last")} ${rangeFilter} ${t("days")}`)}</div>
               </div>
             </header>
             <div style={{ padding: "20px 18px" }}>
@@ -3802,8 +3833,15 @@ function ImportModal({ onClose, onImport }) {
     alert(`Imported ${added} ${dataType === "entries" ? "entries" : "deposit records"}`);
   };
 
-  const previewEntries = parsedRows ? buildEntriesFromTabular().slice(0, 10) : [];
-  const validCount = parsedRows ? buildEntriesFromTabular().length : 0;
+  // Build the import rows once per relevant-input change instead of recomputing
+  // on every render. buildEntriesFromTabular re-parses dates, normalizes geos,
+  // and runs regex geo-extraction over every row — expensive for large exports.
+  const builtRows = useMemo(
+    () => (parsedRows ? buildEntriesFromTabular() : []),
+    [parsedRows, columnMapping, dataType, defaultAccount, defaultGeo, autoExtractGeo]
+  );
+  const previewEntries = builtRows.slice(0, 10);
+  const validCount = builtRows.length;
   const totalRows = parsedRows ? parsedRows.length : 0;
 
   return (
@@ -4768,76 +4806,6 @@ function KpiTile({ label, dotVar, value, delta, sparkSeries, sparkColor }) {
           </svg>
         )}
       </div>
-    </div>
-  );
-}
-
-function HeroStat({ label, value, sublabel, icon, accent }) {
-  const accents = {
-    emerald: { glow: "rgba(52,211,153,0.18)", text: "text-emerald-400" },
-    amber: { glow: "rgba(251,191,36,0.18)", text: "text-amber-400" },
-    violet: { glow: "rgba(167,139,250,0.18)", text: "text-violet-400" },
-    cyan: { glow: "rgba(34,211,238,0.18)", text: "text-cyan-400" },
-  };
-  const ac = accents[accent] || accents.cyan;
-  // Detect CJK characters — Chinese/Japanese/Korean labels need tighter
-  // letter-spacing and no uppercase to avoid awkward wrapping.
-  const labelStr = String(label || "");
-  const hasCJK = /[\u3000-\u9fff\uac00-\ud7af]/.test(labelStr);
-  const labelClass = hasCJK
-    ? `relative text-[11px] tracking-normal whitespace-nowrap ${ac.text} mb-1.5 flex items-center gap-1.5 min-w-0`
-    : `relative text-[10px] uppercase tracking-[0.2em] whitespace-nowrap ${ac.text} mb-1.5 flex items-center gap-1.5 min-w-0`;
-  return (
-    <div className="p-3 md:p-5 lg:p-4 xl:p-5 border-r last:border-r-0 lg:border-b-0 border-slate-800/60 relative group hover:bg-slate-900/30 transition-colors min-w-0 overflow-hidden">
-      <div
-        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-        style={{ background: `radial-gradient(circle at 50% 50%, ${ac.glow}, transparent 70%)` }}
-      />
-      <div className={labelClass}>
-        <span className="shrink-0">{icon}</span>
-        <span className="truncate">{label}</span>
-      </div>
-      <div className="relative font-mono-num text-xl md:text-2xl xl:text-3xl font-bold text-white leading-none truncate">
-        {value}
-      </div>
-      {sublabel && (
-        <div className="relative text-[10px] text-slate-400 font-mono-num mt-1 truncate">
-          {sublabel}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MiniMetric({ label, value, icon, accent }) {
-  const colors = { emerald: "text-emerald-400", violet: "text-violet-400", amber: "text-amber-400", cyan: "text-cyan-400" };
-  return (
-    <div>
-      <div className={`flex items-center gap-1 text-[10px] uppercase tracking-wider mb-1 ${colors[accent] || "text-slate-400"}`}>{icon}{label}</div>
-      <div className="font-mono-num text-base md:text-xl font-bold text-white">{value}</div>
-    </div>
-  );
-}
-
-function KpiCard({ label, value, change, sublabel, accent, higherIsBetter = true }) {
-  const accents = {
-    cyan: "from-cyan-500/30 to-transparent", violet: "from-violet-500/30 to-transparent",
-    pink: "from-pink-500/30 to-transparent", emerald: "from-emerald-500/30 to-transparent",
-    amber: "from-amber-500/30 to-transparent", blue: "from-blue-500/30 to-transparent",
-  };
-  const ac = accents[accent] || accents.cyan;
-  const isPositive = higherIsBetter ? change >= 0 : change <= 0;
-  return (
-    <div className="glass rounded-xl p-3 md:p-4 relative overflow-hidden">
-      <div className={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r ${ac}`} />
-      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-1.5">{label}</div>
-      <div className="font-mono-num text-lg md:text-2xl font-bold text-white mb-1">{value}</div>
-      {change !== null && change !== undefined && !isNaN(change) ? (
-        <div className={`flex items-center gap-1 text-[10px] ${isPositive ? "text-emerald-400" : "text-pink-400"}`}>
-          {change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-          <span className="font-mono-num">{change >= 0 ? "+" : ""}{change.toFixed(1)}%</span>
-        </div>
-      ) : sublabel ? <div className="text-[10px] text-slate-500 truncate">{sublabel}</div> : <div className="text-[10px] text-slate-600">—</div>}
     </div>
   );
 }
